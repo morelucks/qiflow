@@ -6,8 +6,7 @@
 
 QiFlow is a developer-first payment infrastructure built on the Quai Network that allows businesses and applications to accept **Qi payments** through a simple API and shareable payment links.
 
-Instead of asking merchants to understand wallets, blockchain transactions, RPCs, or Quai's sharded architecture, QiFlow provides a familiar payment experience inspired by platforms like **Flutterwave and Stripe**.
-
+Instead of asking merchants to understand wallets, blockchain transactions, RPCs, or Quai's sharded architecture, QiFlow provides a simple, familiar payment experience that abstracts away the underlying blockchain complexity.
 ---
 
 ## The Problem
