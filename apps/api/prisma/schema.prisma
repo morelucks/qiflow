@@ -1,0 +1,150 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PaymentStatus {
+  CREATED
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+  EXPIRED
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  DELIVERED
+  FAILED
+  DEAD
+}
+
+model Merchant {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email         String   @unique
+  passwordHash  String   @map("password_hash")
+  businessName  String   @map("business_name")
+  walletAddress String?  @map("wallet_address")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  apiKeys      ApiKey[]
+  payments     Payment[]
+  paymentLinks PaymentLink[]
+  webhooks     Webhook[]
+
+  @@map("merchants")
+}
+
+model ApiKey {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  merchantId String    @map("merchant_id") @db.Uuid
+  keyHash    String    @unique @map("key_hash")
+  keyPrefix  String    @map("key_prefix")
+  lastFour   String    @map("last_four")
+  name       String    @default("Default API Key")
+  isActive   Boolean   @default(true) @map("is_active")
+  lastUsedAt DateTime? @map("last_used_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([keyHash])
+  @@map("api_keys")
+}
+
+model Payment {
+  id               String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  merchantId       String        @map("merchant_id") @db.Uuid
+  paymentLinkId    String?       @map("payment_link_id") @db.Uuid
+  paymentCode      String        @unique @map("payment_code")
+  amount           Decimal       @db.Decimal(18, 8)
+  currency         String        @default("QI")
+  description      String?
+  status           PaymentStatus @default(CREATED)
+  receivingAddress String        @map("receiving_address")
+  txHash           String?       @map("tx_hash")
+  metadata         Json?
+  expiresAt        DateTime      @map("expires_at")
+  completedAt      DateTime?     @map("completed_at")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  merchant          Merchant          @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  paymentLink       PaymentLink?      @relation(fields: [paymentLinkId], references: [id], onDelete: SetNull)
+  webhookDeliveries WebhookDelivery[]
+
+  @@index([merchantId])
+  @@index([paymentCode])
+  @@index([status])
+  @@map("payments")
+}
+
+model PaymentLink {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  merchantId  String   @map("merchant_id") @db.Uuid
+  linkCode    String   @unique @map("link_code")
+  name        String
+  amount      Decimal? @db.Decimal(18, 8)
+  currency    String   @default("QI")
+  description String?
+  fixedAmount Boolean  @default(true) @map("fixed_amount")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  merchant Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  payments Payment[]
+
+  @@index([merchantId])
+  @@index([linkCode])
+  @@map("payment_links")
+}
+
+model Webhook {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  merchantId String  @map("merchant_id") @db.Uuid
+  url       String
+  secret    String
+  events    String[]
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  merchant          Merchant          @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  webhookDeliveries WebhookDelivery[]
+
+  @@index([merchantId])
+  @@map("webhooks")
+}
+
+model WebhookDelivery {
+  id           String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  webhookId    String                @map("webhook_id") @db.Uuid
+  paymentId    String                @map("payment_id") @db.Uuid
+  event        String
+  payload      Json
+  attempt      Int                   @default(1)
+  statusCode   Int?                  @map("status_code")
+  responseBody String?               @map("response_body")
+  status       WebhookDeliveryStatus @default(PENDING)
+  deliveredAt  DateTime?             @map("delivered_at")
+  nextRetryAt  DateTime?             @map("next_retry_at")
+  createdAt    DateTime              @default(now()) @map("created_at")
+
+  webhook Webhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([webhookId])
+  @@index([paymentId])
+  @@map("webhook_deliveries")
+}
