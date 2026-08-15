@@ -1,0 +1,206 @@
+{
+  "info": {
+    "name": "QiFlow API (Local Dev)",
+    "description": "Postman Collection for testing QiFlow Merchant Authentication, API Keys, and Profile Endpoints.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3001/health",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3001",
+          "path": ["health"]
+        }
+      }
+    },
+    {
+      "name": "Auth - Register",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var jsonData = pm.response.json();",
+              "if (jsonData.success && jsonData.data.tokens) {",
+              "    pm.environment.set('accessToken', jsonData.data.tokens.accessToken);",
+              "    pm.environment.set('refreshToken', jsonData.data.tokens.refreshToken);",
+              "    if (jsonData.data.apiKey) {",
+              "        pm.environment.set('apiKey', jsonData.data.apiKey.rawKey);",
+              "    }",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"merchant@example.com\",\n  \"password\": \"Password123!\",\n  \"businessName\": \"My Qi Store\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3001/auth/register",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3001",
+          "path": ["auth", "register"]
+        }
+      }
+    },
+    {
+      "name": "Auth - Login",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var jsonData = pm.response.json();",
+              "if (jsonData.success && jsonData.data.tokens) {",
+              "    pm.environment.set('accessToken', jsonData.data.tokens.accessToken);",
+              "    pm.environment.set('refreshToken', jsonData.data.tokens.refreshToken);",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"merchant@example.com\",\n  \"password\": \"Password123!\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3001/auth/login",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3001",
+          "path": ["auth", "login"]
+        }
+      }
+    },
+    {
+      "name": "Auth - Refresh Token",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3001/auth/refresh",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3001",
+          "path": ["auth", "refresh"]
+        }
+      }
+    },
+    {
+      "name": "Merchant - Get Profile",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:3001/merchants/me",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3001",
+          "path": ["merchants", "me"]
+        }
+      }
+    },
+    {
+      "name": "Merchant - Update Profile",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"businessName\": \"Updated Store Name\",\n  \"walletAddress\": \"0x00473a216f2b1d382759e612bf6029fa037e95b2\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3001/merchants/me",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3001",
+          "path": ["merchants", "me"]
+        }
+      }
+    },
+    {
+      "name": "API Keys - Create Key",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Postman Key\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3001/merchants/me/api-keys",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3001",
+          "path": ["merchants", "me", "api-keys"]
+        }
+      }
+    },
+    {
+      "name": "API Keys - List Keys",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:3001/merchants/me/api-keys",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3001",
+          "path": ["merchants", "me", "api-keys"]
+        }
+      }
+    },
+    {
+      "name": "Merchant - Dashboard Stats",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:3001/merchants/me/stats",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3001",
+          "path": ["merchants", "me", "stats"]
+        }
+      }
+    }
+  ]
+}
