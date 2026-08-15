@@ -1,0 +1,49 @@
+# ─── Dependencies ─────────────────────────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+
+# ─── Build outputs ────────────────────────────────────────────────────────────
+dist/
+build/
+.next/
+out/
+
+# ─── Environment variables (NEVER commit .env files) ─────────────────────────
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.staging
+# .env.example is intentionally NOT ignored — it documents required vars
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+pino.log
+
+# ─── Turborepo ────────────────────────────────────────────────────────────────
+.turbo/
+
+# ─── TypeScript ───────────────────────────────────────────────────────────────
+*.tsbuildinfo
+
+# ─── OS / Editor ──────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ─── Testing ──────────────────────────────────────────────────────────────────
+coverage/
+.nyc_output/
+
+# ─── Prisma ───────────────────────────────────────────────────────────────────
+# Generated client is rebuilt on install — don't commit
+apps/api/src/generated/
+
+# ─── Misc ─────────────────────────────────────────────────────────────────────
+*.local

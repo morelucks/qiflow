@@ -1,0 +1,21 @@
+{
+  "name": "@qiflow/config",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Shared ESLint and TypeScript configs for QiFlow",
+  "exports": {
+    "./eslint/base": "./eslint/base.js",
+    "./eslint/next": "./eslint/next.js",
+    "./typescript/base": "./typescript/base.json",
+    "./typescript/nextjs": "./typescript/nextjs.json",
+    "./typescript/node": "./typescript/node.json"
+  },
+  "devDependencies": {
+    "@eslint/js": "8.57.1",
+    "@typescript-eslint/eslint-plugin": "8.20.0",
+    "@typescript-eslint/parser": "8.20.0",
+    "eslint": "8.57.1",
+    "eslint-config-next": "14.2.24",
+    "typescript": "5.7.3"
+  }
+}
