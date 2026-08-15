@@ -1,0 +1,26 @@
+{
+  "name": "@qiflow/shared",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Shared types, constants, and utilities for QiFlow",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint src --ext .ts",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "@qiflow/config": "*",
+    "typescript": "5.7.3"
+  }
+}
