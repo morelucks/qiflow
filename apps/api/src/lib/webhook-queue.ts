@@ -23,7 +23,7 @@ export interface WebhookJobData {
   webhookId: string;
   paymentId: string;
   event: string;
-  payload: any;
+  payload: Record<string, unknown>;
 }
 
 /**
@@ -34,7 +34,7 @@ export async function enqueueWebhookEvent(
   merchantId: string,
   paymentId: string,
   event: string,
-  payload: any
+  payload: Record<string, unknown>
 ): Promise<void> {
   const webhooks = await prisma.webhook.findMany({
     where: {

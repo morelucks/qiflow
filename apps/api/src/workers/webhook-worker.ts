@@ -1,4 +1,5 @@
-import { Worker, Job } from 'bullmq';
+import { Worker } from 'bullmq';
+import type { Job } from 'bullmq';
 import { prisma } from '../lib/prisma.js';
 import { decryptWebhookSecret } from '../lib/webhook-crypto.js';
 import { redisConnection } from '../lib/webhook-queue.js';
@@ -67,13 +68,18 @@ export function startWebhookWorker() {
 
         const text = await response.text();
         responseBody = text.substring(0, 1024); // Truncate response to 1KB
-      } catch (err: any) {
-        if (err.name === 'AbortError' || err.message?.includes('aborted')) {
-          errorMsg = 'Timeout: request took longer than 10 seconds';
+      } catch (err: unknown) {
+        if (err instanceof Error) {
+          if (err.name === 'AbortError' || err.message.includes('aborted')) {
+            errorMsg = 'Timeout: request took longer than 10 seconds';
+          } else {
+            errorMsg = err.message;
+          }
         } else {
-          errorMsg = err.message || String(err);
+          errorMsg = String(err);
         }
-        responseBody = errorMsg ? errorMsg.substring(0, 1024) : null;
+
+        responseBody = errorMsg.substring(0, 1024);
       } finally {
         clearTimeout(timeoutId);
       }
