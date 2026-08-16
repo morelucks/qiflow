@@ -7,12 +7,30 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import healthRouter from './routes/health.js';
 import authRouter from './routes/auth.js';
 import merchantsRouter from './routes/merchants.js';
+import docsRouter from './routes/docs.js';
 
 export function createApp() {
   const app = express();
 
   // ── Security headers ─────────────────────────────────────────────────────
   app.use(helmet());
+
+  // ── Relaxed CSP for /docs (Swagger UI loads assets from unpkg CDN) ────────
+  app.use(
+    '/docs',
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", 'https://unpkg.com', "'unsafe-inline'"],
+          styleSrc: ["'self'", 'https://unpkg.com', "'unsafe-inline'"],
+          imgSrc: ["'self'", 'data:', 'https://unpkg.com'],
+          connectSrc: ["'self'"],
+          fontSrc: ["'self'", 'https://unpkg.com'],
+        },
+      },
+    })
+  );
 
   // ── CORS ──────────────────────────────────────────────────────────────────
   app.use(
@@ -43,6 +61,7 @@ export function createApp() {
   app.use('/health', healthRouter);
   app.use('/auth', authRouter);
   app.use('/merchants', merchantsRouter);
+  app.use('/docs', docsRouter);
 
   // ── 404 + error handlers (must be last) ───────────────────────────────────
   app.use(notFoundHandler);

@@ -7,6 +7,7 @@ const app = createApp();
 const server = app.listen(env.PORT, () => {
   logger.info(`🚀 QiFlow API running on port ${env.PORT} [${env.NODE_ENV}]`);
   logger.info(`   Health: http://localhost:${env.PORT}/health`);
+  logger.info(`   Docs:   http://localhost:${env.PORT}/docs`);
 });
 
 // ── Graceful shutdown ─────────────────────────────────────────────────────
