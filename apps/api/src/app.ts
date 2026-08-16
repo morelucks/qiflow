@@ -7,6 +7,7 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import healthRouter from './routes/health.js';
 import authRouter from './routes/auth.js';
 import merchantsRouter from './routes/merchants.js';
+import webhooksRouter from './routes/webhooks.js';
 
 export function createApp() {
   const app = express();
@@ -43,6 +44,7 @@ export function createApp() {
   app.use('/health', healthRouter);
   app.use('/auth', authRouter);
   app.use('/merchants', merchantsRouter);
+  app.use('/v1/webhooks', webhooksRouter);
 
   // ── 404 + error handlers (must be last) ───────────────────────────────────
   app.use(notFoundHandler);

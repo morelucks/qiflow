@@ -1,8 +1,12 @@
 import { createApp } from './app.js';
 import { env } from './config/env.js';
 import { logger } from './lib/logger.js';
+import { startWebhookWorker, stopWebhookWorker } from './workers/webhook-worker.js';
 
 const app = createApp();
+
+// Start background workers
+startWebhookWorker();
 
 const server = app.listen(env.PORT, () => {
   logger.info(`🚀 QiFlow API running on port ${env.PORT} [${env.NODE_ENV}]`);
@@ -12,8 +16,13 @@ const server = app.listen(env.PORT, () => {
 // ── Graceful shutdown ─────────────────────────────────────────────────────
 function shutdown(signal: string) {
   logger.info(`${signal} received — shutting down gracefully`);
-  server.close(() => {
+  server.close(async () => {
     logger.info('HTTP server closed');
+    try {
+      await stopWebhookWorker();
+    } catch (err) {
+      logger.error({ err }, 'Error closing webhook worker');
+    }
     process.exit(0);
   });
 

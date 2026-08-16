@@ -107,7 +107,7 @@ export async function requireApiKey(req: Request, res: Response, next: NextFunct
           where: { id: apiKey.id },
           data: { lastUsedAt: now },
         })
-        .catch((err) => {
+        .catch((err: unknown) => {
           // Log background update error without failing the request
           console.error('Failed to update API key lastUsedAt:', err);
         });
