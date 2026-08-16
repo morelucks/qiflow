@@ -24,6 +24,12 @@ export const WEBHOOK_RETRY_DELAYS_MS = [
 
 export const WEBHOOK_DELIVERY_TIMEOUT_MS = 10_000; // 10 seconds
 export const WEBHOOK_MAX_ATTEMPTS = 5;
+export const WEBHOOK_TIMESTAMP_MAX_AGE_SECONDS = 300; // 5 minutes — replay protection
+
+// Outgoing webhook request headers
+export const WEBHOOK_SIGNATURE_HEADER = 'X-QiFlow-Signature';
+export const WEBHOOK_TIMESTAMP_HEADER = 'X-QiFlow-Timestamp';
+export const WEBHOOK_EVENT_HEADER = 'X-QiFlow-Event';
 
 // Auth
 export const JWT_ACCESS_EXPIRY = '15m';

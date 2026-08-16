@@ -22,6 +22,11 @@ const envSchema = z.object({
   // Frontend URL (for CORS + checkout links)
   FRONTEND_URL: z.string().url().default('http://localhost:3000'),
   CHECKOUT_BASE_URL: z.string().url().default('http://localhost:3000'),
+
+  // Webhook signing — 32-byte AES-256-GCM key (64 hex chars)
+  WEBHOOK_SECRET_KEY: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/i, 'WEBHOOK_SECRET_KEY must be a 32-byte hex string (64 hex chars)'),
 });
 
 function loadEnv() {
