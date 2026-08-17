@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, no-console */
 import { createApp } from './app.js';
 import type { Server } from 'http';
 
