@@ -5,10 +5,10 @@ import { logger } from './logger.js';
 export const redisClient = new Redis(env.REDIS_URL, {
     maxRetriesPerRequest: 1,
     lazyConnect: false,
-    retryStrategy: (times) => Math.min(times * 200, 2000),
+    retryStrategy: (times: number) => Math.min(times * 200, 2000),
 });
 
-redisClient.on('error', (err) => {
+redisClient.on('error', (err: unknown) => {
     logger.warn({ err }, 'Redis connection error — rate limiting will fall back to in-memory store');
 });
 
