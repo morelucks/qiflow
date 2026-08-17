@@ -8,6 +8,9 @@ import healthRouter from './routes/health.js';
 import authRouter from './routes/auth.js';
 import merchantsRouter from './routes/merchants.js';
 import docsRouter from './routes/docs.js';
+import paymentLinksRouter from './routes/payment-links.js';
+import paymentsRouter from './routes/payments.js';
+import webhooksRouter from './routes/webhooks.js';
 
 export function createApp() {
   const app = express();
@@ -65,6 +68,12 @@ export function createApp() {
   app.use('/auth', authRouter);
   app.use('/merchants', merchantsRouter);
   app.use('/docs', docsRouter);
+  app.use('/v1/payment-links', paymentLinksRouter);
+  app.use('/payment-links', paymentLinksRouter);
+  app.use('/v1/payments', paymentsRouter);
+  app.use('/payments', paymentsRouter);
+  app.use('/v1/webhooks', webhooksRouter);
+  app.use('/webhooks', webhooksRouter);
 
   // ── 404 + error handlers (must be last) ───────────────────────────────────
   app.use(notFoundHandler);

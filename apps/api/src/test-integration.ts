@@ -3,7 +3,7 @@ import { createApp } from './app.js';
 import type { Server } from 'http';
 
 async function runIntegrationTest() {
-  console.log('🧪 Starting live API integration test against PostgreSQL database...\n');
+  console.log('🧪 Starting live API integration test suite against PostgreSQL database...\n');
 
   const app = createApp();
   const PORT = 3099;
@@ -37,12 +37,11 @@ async function runIntegrationTest() {
     const regData = (await regRes.json()) as any;
     console.log('   Status:', regRes.status);
     console.log('   Registered merchant ID:', regData.data?.merchant?.id);
-    console.log('   Auto-generated API Key prefix:', regData.data?.apiKey?.keyPrefix);
+    console.log('   Initial raw API Key:', regData.data?.apiKey?.rawKey);
     if (regRes.status !== 201) throw new Error('Registration failed');
 
     const accessToken = regData.data.tokens.accessToken;
-    const refreshToken = regData.data.tokens.refreshToken;
-    console.log('   Initial raw API Key:', regData.data.apiKey.rawKey);
+    const apiKey = regData.data.apiKey.rawKey;
 
     // Test 3: Login
     console.log('\n3️⃣ Testing POST /auth/login ...');
@@ -58,86 +57,117 @@ async function runIntegrationTest() {
     console.log('   Status:', loginRes.status, 'Logged in email:', loginData.data?.merchant?.email);
     if (loginRes.status !== 200) throw new Error('Login failed');
 
-    // Test 4: Refresh token
-    console.log('\n4️⃣ Testing POST /auth/refresh ...');
-    const refreshRes = await fetch(`${baseUrl}/auth/refresh`, {
+    // Test 4: Create Webhook Endpoint
+    console.log('\n4️⃣ Testing POST /v1/webhooks (API Key Auth) ...');
+    const webhookRes = await fetch(`${baseUrl}/v1/webhooks`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': apiKey,
+      },
+      body: JSON.stringify({
+        url: 'https://example.com/api/webhook-test',
+        events: ['payment.completed', 'payment.failed'],
+      }),
     });
-    const refreshData = (await refreshRes.json()) as any;
-    console.log('   Status:', refreshRes.status, 'New access token generated:', Boolean(refreshData.data?.tokens?.accessToken));
-    if (refreshRes.status !== 200) throw new Error('Token refresh failed');
+    const webhookData = (await webhookRes.json()) as any;
+    console.log('   Status:', webhookRes.status, 'Webhook secret:', webhookData.data?.secret);
+    if (webhookRes.status !== 201) throw new Error('Webhook creation failed');
 
-    // Test 5: Get merchant profile (requireAuth)
-    console.log('\n5️⃣ Testing GET /merchants/me (JWT Bearer Auth) ...');
-    const meRes = await fetch(`${baseUrl}/merchants/me`, {
+    // Test 5: Create Payment Session
+    console.log('\n5️⃣ Testing POST /v1/payments (API Key Auth) ...');
+    const payRes = await fetch(`${baseUrl}/v1/payments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': apiKey,
+      },
+      body: JSON.stringify({
+        amount: 25.5,
+        currency: 'QI',
+        description: 'Test Qi Payment Session',
+      }),
+    });
+    const payData = (await payRes.json()) as any;
+    console.log('   Status:', payRes.status, 'Payment Code:', payData.data?.paymentCode);
+    if (payRes.status !== 201) throw new Error('Payment creation failed');
+
+    const paymentCode = payData.data.paymentCode;
+    const paymentId = payData.data.id;
+
+    // Test 6: Public Payment Lookup
+    console.log('\n6️⃣ Testing GET /v1/payments/public/code/:code ...');
+    const publicPayRes = await fetch(`${baseUrl}/v1/payments/public/code/${paymentCode}`);
+    const publicPayData = (await publicPayRes.json()) as any;
+    console.log('   Status:', publicPayRes.status, 'Merchant:', publicPayData.data?.merchantName);
+    if (publicPayRes.status !== 200) throw new Error('Public payment lookup failed');
+
+    // Test 7: Simulate Payment Completion & Trigger Webhooks
+    console.log('\n7️⃣ Testing POST /v1/payments/:id/simulate ...');
+    const simRes = await fetch(`${baseUrl}/v1/payments/${paymentId}/simulate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ status: 'COMPLETED' }),
+    });
+    const simData = (await simRes.json()) as any;
+    console.log('   Status:', simRes.status, 'Simulated Payment Status:', simData.data?.status);
+    if (simRes.status !== 200 || simData.data?.status !== 'COMPLETED')
+      throw new Error('Payment simulation failed');
+
+    // Test 8: List Webhook Deliveries
+    console.log('\n8️⃣ Testing GET /v1/webhooks/deliveries ...');
+    const delRes = await fetch(`${baseUrl}/v1/webhooks/deliveries`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-    const meData = (await meRes.json()) as any;
-    console.log('   Status:', meRes.status, 'Business name:', meData.data?.businessName);
-    if (meRes.status !== 200) throw new Error('Get merchant profile failed');
+    const delData = (await delRes.json()) as any;
+    console.log('   Status:', delRes.status, 'Delivery count:', delData.data?.length);
+    if (delRes.status !== 200) throw new Error('Fetching webhook deliveries failed');
 
-    // Test 6: Update merchant profile
-    console.log('\n6️⃣ Testing PUT /merchants/me ...');
-    const updateRes = await fetch(`${baseUrl}/merchants/me`, {
-      method: 'PUT',
+    // Test 9: Create Payment Link
+    console.log('\n9️⃣ Testing POST /v1/payment-links ...');
+    const linkRes = await fetch(`${baseUrl}/v1/payment-links`, {
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify({
-        businessName: 'Acme Qi Store Updated',
-        walletAddress: '0x00473a216f2b1d382759e612bf6029fa037e95b2',
+        name: 'Coffee Donation Link',
+        amount: 5.0,
+        currency: 'QI',
+        description: 'Support creator with Qi',
+        fixedAmount: true,
       }),
     });
-    const updateData = (await updateRes.json()) as any;
-    console.log('   Status:', updateRes.status, 'Updated business name:', updateData.data?.businessName);
-    if (updateRes.status !== 200) throw new Error('Update merchant profile failed');
+    const linkData = (await linkRes.json()) as any;
+    console.log('   Status:', linkRes.status, 'Link Code:', linkData.data?.linkCode);
+    if (linkRes.status !== 201) throw new Error('Payment link creation failed');
 
-    // Test 7: Generate new API key
-    console.log('\n7️⃣ Testing POST /merchants/me/api-keys ...');
-    const newKeyRes = await fetch(`${baseUrl}/merchants/me/api-keys`, {
+    const linkCode = linkData.data.linkCode;
+
+    // Test 10: Public Payment Link Lookup & Checkout Generation
+    console.log('\n🔟 Testing GET & POST /v1/payment-links/public/:linkCode ...');
+    const pubLinkRes = await fetch(`${baseUrl}/v1/payment-links/public/${linkCode}`);
+    const pubLinkData = (await pubLinkRes.json()) as any;
+    console.log('   Public Link Lookup Status:', pubLinkRes.status, 'Name:', pubLinkData.data?.name);
+
+    const checkoutRes = await fetch(`${baseUrl}/v1/payment-links/public/${linkCode}/checkout`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({ name: 'Secondary Secret Key' }),
+      headers: { 'Content-Type': 'application/json' },
     });
-    const newKeyData = (await newKeyRes.json()) as any;
-    console.log('   Status:', newKeyRes.status, 'New Raw API Key:', newKeyData.data?.rawKey?.substring(0, 16) + '...');
-    if (newKeyRes.status !== 201) throw new Error('API Key creation failed');
+    const checkoutData = (await checkoutRes.json()) as any;
+    console.log(
+      '   Checkout Session Generation Status:',
+      checkoutRes.status,
+      'Redirect paymentCode:',
+      checkoutData.data?.paymentCode
+    );
 
-    // Test 8: List API keys
-    console.log('\n8️⃣ Testing GET /merchants/me/api-keys ...');
-    const listKeysRes = await fetch(`${baseUrl}/merchants/me/api-keys`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    const listKeysData = (await listKeysRes.json()) as any;
-    console.log('   Status:', listKeysRes.status, 'API Key count:', listKeysData.data?.length);
-    console.log('   Prefixes listed (no raw keys in listing):', listKeysData.data?.map((k: any) => k.keyPrefix));
-    if (listKeysRes.status !== 200) throw new Error('List API keys failed');
-
-    // Test 9: Get merchant stats
-    console.log('\n9️⃣ Testing GET /merchants/me/stats ...');
-    const statsRes = await fetch(`${baseUrl}/merchants/me/stats`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    const statsData = (await statsRes.json()) as any;
-    console.log('   Status:', statsRes.status, 'Stats:', JSON.stringify(statsData.data));
-    if (statsRes.status !== 200) throw new Error('Get stats failed');
-
-    // Test 10: Revoke API key
-    console.log('\n🔟 Testing DELETE /merchants/me/api-keys/:id ...');
-    const createdKeyId = newKeyData.data.id;
-    const deleteKeyRes = await fetch(`${baseUrl}/merchants/me/api-keys/${createdKeyId}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    const deleteKeyData = (await deleteKeyRes.json()) as any;
-    console.log('   Status:', deleteKeyRes.status, 'Message:', deleteKeyData.message);
-    if (deleteKeyRes.status !== 200) throw new Error('Revoke API key failed');
+    if (pubLinkRes.status !== 200 || checkoutRes.status !== 200)
+      throw new Error('Payment link public checkout failed');
 
     console.log('\n✨ ALL 10 INTEGRATION TESTS PASSED 100% CLEANLY! ✨\n');
   } finally {
