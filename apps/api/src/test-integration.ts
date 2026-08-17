@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, no-console */
 import { createApp } from './app.js';
 import type { Server } from 'http';
 
@@ -41,7 +42,7 @@ async function runIntegrationTest() {
 
     const accessToken = regData.data.tokens.accessToken;
     const refreshToken = regData.data.tokens.refreshToken;
-    const initialApiKey = regData.data.apiKey.rawKey;
+    console.log('   Initial raw API Key:', regData.data.apiKey.rawKey);
 
     // Test 3: Login
     console.log('\n3️⃣ Testing POST /auth/login ...');
