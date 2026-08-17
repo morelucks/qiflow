@@ -25,7 +25,7 @@ export function createApp() {
           scriptSrc: ["'self'", 'https://unpkg.com', "'unsafe-inline'"],
           styleSrc: ["'self'", 'https://unpkg.com', "'unsafe-inline'"],
           imgSrc: ["'self'", 'data:', 'https://unpkg.com'],
-          connectSrc: ["'self'"],
+          connectSrc: ["'self'", '*'],
           fontSrc: ["'self'", 'https://unpkg.com'],
         },
       },
