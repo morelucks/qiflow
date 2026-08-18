@@ -1,0 +1,12 @@
+{
+  "extends": ["../packages/config/eslint/base.js"],
+  "overrides": [
+    {
+      "files": ["src/test-integration.ts"],
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "off",
+        "no-console": "off"
+      }
+    }
+  ]
+}

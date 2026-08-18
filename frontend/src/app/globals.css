@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@layer base {
+  :root {
+    --brand-ink: #13102B;
+    --brand-indigo: #1E1B4B;
+    --brand-violet: #6C4AB6;
+    --brand-mint: #00E6A8;
+    --brand-lilac: #C9BCF0;
+    --brand-offwhite: #F7F6FB;
+    --brand-white: #FFFFFF;
+
+    --color-border: 250 20% 90%;
+    --color-background: 252 50% 98%; /* #F7F6FB Off-White */
+    --color-foreground: 247 45% 12%; /* #13102B Ink */
+    --color-primary: 260 52% 53%; /* #6C4AB6 Violet */
+    --color-muted: 256 30% 55%;
+    --color-destructive: 0 84.2% 60.2%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --color-border: 247 45% 20%;
+    --color-background: 248 48% 20%; /* #1E1B4B Primary / Deep Indigo */
+    --color-foreground: 0 0% 100%; /* #FFFFFF White headlines */
+    --color-primary: 260 52% 53%; /* #6C4AB6 Violet */
+    --color-muted: 256 60% 84%; /* #C9BCF0 Lilac muted text */
+    --color-destructive: 0 62.8% 30.6%;
+  }
+
+  * {
+    border-color: hsl(var(--color-border));
+  }
+
+  body {
+    @apply font-sans antialiased;
+    background-color: hsl(var(--color-background));
+    color: hsl(var(--color-foreground));
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-brand-500;
+  }
+}
+
+@layer components {
+  .badge-created    { @apply bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300; }
+  .badge-pending    { @apply bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400; }
+  .badge-processing { @apply bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400; }
+  .badge-completed  { @apply bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400; }
+  .badge-failed     { @apply bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400; }
+  .badge-cancelled  { @apply bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400; }
+  .badge-expired    { @apply bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400; }
+}
