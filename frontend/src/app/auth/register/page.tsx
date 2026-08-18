@@ -1,9 +1,46 @@
-import type { Metadata } from 'next';
-import Link from 'next/link';
+'use client';
 
-export const metadata: Metadata = { title: 'Create account' };
+import { useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { apiClient } from '@/lib/api-client';
 
 export default function RegisterPage() {
+  const router = useRouter();
+  const [businessName, setBusinessName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    try {
+      const res = await apiClient<{
+        merchant: { id: string; email: string; businessName: string };
+        tokens: { accessToken: string; refreshToken: string; expiresIn: number };
+      }>('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ businessName, email, password }),
+      });
+
+      if (res.success && res.data?.tokens) {
+        localStorage.setItem('accessToken', res.data.tokens.accessToken);
+        localStorage.setItem('refreshToken', res.data.tokens.refreshToken);
+        router.push('/dashboard');
+      } else {
+        setError(res.error?.message || 'Registration failed');
+      }
+    } catch {
+      setError('An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950 px-4">
       <div className="w-full max-w-sm">
@@ -22,8 +59,13 @@ export default function RegisterPage() {
           </p>
         </div>
 
-        {/* Form — wired up in issue #3 (Auth System) */}
-        <form className="space-y-4">
+        {error && (
+          <div className="mb-4 p-3 text-sm text-red-600 bg-red-50 dark:bg-red-950/50 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-lg">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label
               htmlFor="businessName"
@@ -34,6 +76,8 @@ export default function RegisterPage() {
             <input
               id="businessName"
               type="text"
+              value={businessName}
+              onChange={(e) => setBusinessName(e.target.value)}
               autoComplete="organization"
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm"
               placeholder="Acme Inc."
@@ -50,6 +94,8 @@ export default function RegisterPage() {
             <input
               id="email"
               type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               autoComplete="email"
               required
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm"
@@ -67,6 +113,8 @@ export default function RegisterPage() {
             <input
               id="password"
               type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               autoComplete="new-password"
               required
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm"
@@ -76,12 +124,14 @@ export default function RegisterPage() {
 
           <button
             type="submit"
-            className="w-full bg-brand-600 hover:bg-brand-700 text-white font-medium py-2.5 rounded-lg transition-colors text-sm"
+            disabled={loading}
+            className="w-full bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg transition-colors text-sm"
           >
-            Create account
+            {loading ? 'Creating account...' : 'Create account'}
           </button>
         </form>
       </div>
     </div>
   );
 }
+
