@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import rateLimit from 'express-rate-limit';
 import { prisma } from '../lib/prisma.js';
 import {
   comparePassword,
@@ -9,37 +8,9 @@ import {
   verifyRefreshToken,
 } from '../lib/auth.js';
 import { loginSchema, registerSchema, refreshTokenSchema } from '../schemas/auth.js';
+import { loginLimiter, registerLimiter, refreshLimiter } from '../middleware/rateLimit.js';
 
 const router = Router();
-
-// ── Rate Limiters for Auth Endpoints ──────────────────────────────────────────
-const loginLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    success: false,
-    error: {
-      code: 'RATE_LIMIT_EXCEEDED',
-      message: 'Too many login attempts. Please try again in 1 minute.',
-    },
-  },
-});
-
-const registerLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 3,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    success: false,
-    error: {
-      code: 'RATE_LIMIT_EXCEEDED',
-      message: 'Too many registration attempts. Please try again in 1 minute.',
-    },
-  },
-});
 
 // ── POST /auth/register ───────────────────────────────────────────────────────
 router.post('/register', registerLimiter, async (req, res, next) => {
@@ -153,7 +124,7 @@ router.post('/login', loginLimiter, async (req, res, next) => {
 });
 
 // ── POST /auth/refresh ────────────────────────────────────────────────────────
-router.post('/refresh', async (req, res) => {
+router.post('/refresh', refreshLimiter, async (req, res) => {
   try {
     const input = refreshTokenSchema.parse(req.body);
     const payload = verifyRefreshToken(input.refreshToken);

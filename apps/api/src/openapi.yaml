@@ -1,0 +1,1122 @@
+openapi: 3.0.3
+info:
+  title: QiFlow API
+  description: |
+    The QiFlow payment gateway API. Integrate once, accept Qi everywhere.
+
+    ## Authentication
+
+    QiFlow uses two authentication mechanisms depending on the endpoint group:
+
+    ### JWT Bearer Token (Dashboard endpoints)
+    Issued on login / register. Short-lived access token (15 min) + long-lived refresh token (7 days).
+    ```
+    Authorization: Bearer <accessToken>
+    ```
+
+    ### API Key (Programmatic / v1 endpoints)
+    Generated from the dashboard or via `POST /merchants/me/api-keys`.
+    ```
+    X-API-Key: qf_test_xxxxxxxxxxxxxxxx
+    ```
+
+    ## Rate Limiting
+    Rate-limit headers are returned on every response:
+    | Header | Description |
+    |---|---|
+    | `RateLimit-Limit` | Max requests per window |
+    | `RateLimit-Remaining` | Requests left in current window |
+    | `RateLimit-Reset` | Seconds until window resets |
+
+    Auth endpoints have stricter limits (5 req/min for login, 3 req/min for register).
+    All other endpoints share a global limit of 500 req/15 min.
+
+    ## Error Format
+    All errors follow a consistent shape:
+    ```json
+    {
+      "success": false,
+      "error": {
+        "code": "ERROR_CODE",
+        "message": "Human-readable message"
+      }
+    }
+    ```
+  version: 1.0.0
+  contact:
+    name: QiFlow
+    url: https://qiflow.xyz
+
+servers:
+  - url: https://api.qiflow.xyz
+    description: Production
+  - url: http://localhost:3001
+    description: Local development
+
+tags:
+  - name: Health
+    description: Service health check
+  - name: Auth
+    description: Register, login, and token refresh
+  - name: Merchants
+    description: Merchant profile management (JWT required)
+  - name: API Keys
+    description: Manage API keys (JWT required)
+  - name: Payments
+    description: Create and retrieve payments (API Key required)
+  - name: Webhooks
+    description: Manage webhook endpoints (JWT required)
+
+# ── Security Schemes ──────────────────────────────────────────────────────────
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token obtained from `/auth/login` or `/auth/register`
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key obtained from the merchant dashboard or `POST /merchants/me/api-keys`
+
+  # ── Reusable Schemas ─────────────────────────────────────────────────────────
+  schemas:
+    # ── Generic ─────────────────────────────────────────────────────────────────
+    SuccessEnvelope:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+          example: true
+
+    ErrorEnvelope:
+      type: object
+      required: [success, error]
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              example: INVALID_CREDENTIALS
+            message:
+              type: string
+              example: Invalid email or password
+
+    ValidationError:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Validation failed
+        details:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          example:
+            email: ["Invalid email address"]
+            password: ["Password must be at least 8 characters"]
+
+    # ── Tokens ───────────────────────────────────────────────────────────────────
+    Tokens:
+      type: object
+      required: [accessToken, refreshToken]
+      properties:
+        accessToken:
+          type: string
+          description: Short-lived JWT (15 min)
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        refreshToken:
+          type: string
+          description: Long-lived JWT (7 days)
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+    # ── Merchant ─────────────────────────────────────────────────────────────────
+    Merchant:
+      type: object
+      required: [id, email, businessName, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        email:
+          type: string
+          format: email
+          example: merchant@example.com
+        businessName:
+          type: string
+          example: My Qi Store
+        walletAddress:
+          type: string
+          nullable: true
+          example: "0x00473a216f2b1d382759e612bf6029fa037e95b2"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-01-01T00:00:00.000Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-01-01T00:00:00.000Z"
+
+    # ── API Key ──────────────────────────────────────────────────────────────────
+    ApiKey:
+      type: object
+      required: [id, name, keyPrefix, lastFour, isActive, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+        name:
+          type: string
+          example: Production Key
+        keyPrefix:
+          type: string
+          example: qf_test_
+        lastFour:
+          type: string
+          example: a3f2
+        isActive:
+          type: boolean
+          example: true
+        lastUsedAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-06-01T10:00:00.000Z"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-01-01T00:00:00.000Z"
+
+    NewApiKey:
+      allOf:
+        - $ref: '#/components/schemas/ApiKey'
+        - type: object
+          required: [rawKey, warning]
+          properties:
+            rawKey:
+              type: string
+              description: Full API key — only shown once. Store it securely.
+              example: qf_test_abcdef1234567890a3f2
+            warning:
+              type: string
+              example: Save this API key now. You will not be able to see it again.
+
+    # ── Payment ──────────────────────────────────────────────────────────────────
+    Payment:
+      type: object
+      required: [id, paymentCode, amount, currency, status, receivingAddress, expiresAt, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: f47ac10b-58cc-4372-a567-0e02b2c3d479
+        paymentCode:
+          type: string
+          example: pay_82hd91
+          description: Unique short code used in checkout URLs
+        amount:
+          type: string
+          description: Payment amount in Qi (decimal string)
+          example: "50.00000000"
+        currency:
+          type: string
+          example: QI
+        description:
+          type: string
+          nullable: true
+          example: Nike Air Force 1
+        status:
+          type: string
+          enum: [CREATED, PENDING, PROCESSING, COMPLETED, FAILED, CANCELLED, EXPIRED]
+          example: PENDING
+        receivingAddress:
+          type: string
+          description: Quai wallet address that receives the payment
+          example: "0x00473a216f2b1d382759e612bf6029fa037e95b2"
+        txHash:
+          type: string
+          nullable: true
+          description: Quai transaction hash once payment is broadcast
+          example: "0xabc123..."
+        checkoutUrl:
+          type: string
+          description: Shareable hosted checkout URL
+          example: https://qiflow.xyz/pay/pay_82hd91
+        metadata:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: Arbitrary key/value pairs attached to the payment
+          example:
+            orderId: "1024"
+            customer: "alice@example.com"
+        expiresAt:
+          type: string
+          format: date-time
+          example: "2026-01-01T01:00:00.000Z"
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-01-01T00:00:00.000Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-01-01T00:00:00.000Z"
+
+    # ── Webhook ──────────────────────────────────────────────────────────────────
+    Webhook:
+      type: object
+      required: [id, url, events, isActive, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 9b2d5e8f-1234-4abc-8765-abcdef012345
+        url:
+          type: string
+          format: uri
+          example: https://myshop.com/webhooks/qiflow
+        events:
+          type: array
+          items:
+            type: string
+            enum: [payment.created, payment.pending, payment.completed, payment.failed, payment.expired]
+          example: [payment.completed, payment.failed]
+        isActive:
+          type: boolean
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-01-01T00:00:00.000Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-01-01T00:00:00.000Z"
+
+    # ── Stats ────────────────────────────────────────────────────────────────────
+    MerchantStats:
+      type: object
+      required: [totalReceived, totalTransactions, todayRevenue, todayTransactions, pendingPayments]
+      properties:
+        totalReceived:
+          type: string
+          description: Lifetime completed payment total in Qi
+          example: "12450.00000000"
+        totalTransactions:
+          type: integer
+          example: 124
+        todayRevenue:
+          type: string
+          description: Today's completed payment total in Qi
+          example: "520.00000000"
+        todayTransactions:
+          type: integer
+          example: 8
+        pendingPayments:
+          type: integer
+          description: Count of PENDING + PROCESSING payments
+          example: 3
+
+  # ── Reusable Responses ───────────────────────────────────────────────────────
+  responses:
+    Unauthorized:
+      description: Missing or invalid authentication credentials
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            error:
+              code: UNAUTHORIZED
+              message: Missing or invalid Authorization header
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            error:
+              code: NOT_FOUND
+              message: Resource not found
+
+    ValidationError:
+      description: Request body failed validation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
+
+    RateLimitExceeded:
+      description: Rate limit exceeded
+      headers:
+        RateLimit-Limit:
+          schema:
+            type: integer
+        RateLimit-Remaining:
+          schema:
+            type: integer
+        RateLimit-Reset:
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            error:
+              code: RATE_LIMIT_EXCEEDED
+              message: Too many requests, please try again later.
+
+# ── Paths ─────────────────────────────────────────────────────────────────────
+paths:
+
+  # ── Health ───────────────────────────────────────────────────────────────────
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: Returns service status. Used by load balancers and uptime monitors.
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  service:
+                    type: string
+                    example: qiflow-api
+                  timestamp:
+                    type: string
+                    format: date-time
+                  uptime:
+                    type: integer
+                    description: Process uptime in seconds
+                    example: 3600
+
+  # ── Auth ─────────────────────────────────────────────────────────────────────
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new merchant
+      description: |
+        Creates a new merchant account. On success, returns JWT tokens and an
+        auto-generated API key. **Store the `rawKey` immediately — it is only
+        shown once.**
+
+        Rate limited to **3 requests per minute** per IP.
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, businessName]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: merchant@example.com
+                password:
+                  type: string
+                  minLength: 8
+                  description: Must contain uppercase, lowercase, and a number
+                  example: Password123!
+                businessName:
+                  type: string
+                  minLength: 2
+                  maxLength: 100
+                  example: My Qi Store
+                walletAddress:
+                  type: string
+                  description: Optional Quai wallet address for receiving payments
+                  example: "0x00473a216f2b1d382759e612bf6029fa037e95b2"
+      responses:
+        '201':
+          description: Merchant registered successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          merchant:
+                            $ref: '#/components/schemas/Merchant'
+                          tokens:
+                            $ref: '#/components/schemas/Tokens'
+                          apiKey:
+                            $ref: '#/components/schemas/NewApiKey'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                error:
+                  code: EMAIL_EXISTS
+                  message: A merchant account with this email already exists
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      description: |
+        Authenticates a merchant and returns JWT tokens.
+
+        Rate limited to **5 requests per minute** per IP.
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: merchant@example.com
+                password:
+                  type: string
+                  example: Password123!
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          merchant:
+                            $ref: '#/components/schemas/Merchant'
+                          tokens:
+                            $ref: '#/components/schemas/Tokens'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                error:
+                  code: INVALID_CREDENTIALS
+                  message: Invalid email or password
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token
+      description: |
+        Exchanges a valid refresh token for a new access + refresh token pair.
+        Use this before the access token expires (15 min TTL) to maintain a session.
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+                  example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+      responses:
+        '200':
+          description: Tokens refreshed
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          tokens:
+                            $ref: '#/components/schemas/Tokens'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                error:
+                  code: INVALID_REFRESH_TOKEN
+                  message: Invalid or expired refresh token
+
+  # ── Payments ──────────────────────────────────────────────────────────────────
+  /v1/payments:
+    post:
+      tags: [Payments]
+      summary: Create a payment
+      description: |
+        Creates a new payment session and returns a hosted checkout URL.
+        The merchant's `walletAddress` must be set before creating payments.
+
+        **Authentication:** API Key (`X-API-Key` header)
+      operationId: createPayment
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount:
+                  type: string
+                  description: Payment amount in Qi
+                  example: "100"
+                currency:
+                  type: string
+                  default: QI
+                  example: QI
+                description:
+                  type: string
+                  maxLength: 500
+                  example: Order #1024
+                metadata:
+                  type: object
+                  additionalProperties: true
+                  description: Arbitrary key/value pairs stored with the payment
+                  example:
+                    orderId: "1024"
+                    customer: "alice@example.com"
+            example:
+              amount: "100"
+              currency: QI
+              description: Order #1024
+              metadata:
+                orderId: "1024"
+      responses:
+        '201':
+          description: Payment created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Payment'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+    get:
+      tags: [Payments]
+      summary: List payments
+      description: |
+        Returns a paginated list of payments for the authenticated merchant.
+
+        **Authentication:** API Key (`X-API-Key` header)
+      operationId: listPayments
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [CREATED, PENDING, PROCESSING, COMPLETED, FAILED, CANCELLED, EXPIRED]
+          description: Filter by payment status
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+          description: Number of results per page
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+          description: Pagination offset
+      responses:
+        '200':
+          description: List of payments
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          payments:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Payment'
+                          total:
+                            type: integer
+                            example: 42
+                          limit:
+                            type: integer
+                            example: 20
+                          offset:
+                            type: integer
+                            example: 0
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/payments/{id}:
+    get:
+      tags: [Payments]
+      summary: Get a payment
+      description: |
+        Returns a single payment by ID or payment code.
+
+        **Authentication:** API Key (`X-API-Key` header)
+      operationId: getPayment
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Payment UUID or payment code (e.g. `pay_82hd91`)
+          example: pay_82hd91
+      responses:
+        '200':
+          description: Payment found
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Payment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Webhooks ──────────────────────────────────────────────────────────────────
+  /v1/webhooks:
+    post:
+      tags: [Webhooks]
+      summary: Create a webhook
+      description: |
+        Registers a new webhook endpoint. QiFlow will send signed HTTP POST
+        requests to this URL when the specified events occur.
+
+        **Authentication:** JWT Bearer token
+      operationId: createWebhook
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url, events]
+              properties:
+                url:
+                  type: string
+                  format: uri
+                  example: https://myshop.com/webhooks/qiflow
+                events:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: string
+                    enum: [payment.created, payment.pending, payment.completed, payment.failed, payment.expired]
+                  example: [payment.completed, payment.failed]
+            example:
+              url: https://myshop.com/webhooks/qiflow
+              events: [payment.completed, payment.failed]
+      responses:
+        '201':
+          description: Webhook created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Webhook'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    get:
+      tags: [Webhooks]
+      summary: List webhooks
+      description: |
+        Returns all webhook endpoints for the authenticated merchant.
+
+        **Authentication:** JWT Bearer token
+      operationId: listWebhooks
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of webhooks
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Webhook'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/webhooks/{id}:
+    put:
+      tags: [Webhooks]
+      summary: Update a webhook
+      description: |
+        Updates the URL, events, or active status of a webhook.
+
+        **Authentication:** JWT Bearer token
+      operationId: updateWebhook
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: 9b2d5e8f-1234-4abc-8765-abcdef012345
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url:
+                  type: string
+                  format: uri
+                  example: https://myshop.com/webhooks/qiflow-v2
+                events:
+                  type: array
+                  items:
+                    type: string
+                    enum: [payment.created, payment.pending, payment.completed, payment.failed, payment.expired]
+                isActive:
+                  type: boolean
+                  example: true
+      responses:
+        '200':
+          description: Webhook updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Webhook'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Webhooks]
+      summary: Delete a webhook
+      description: |
+        Permanently removes a webhook endpoint.
+
+        **Authentication:** JWT Bearer token
+      operationId: deleteWebhook
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: 9b2d5e8f-1234-4abc-8765-abcdef012345
+      responses:
+        '200':
+          description: Webhook deleted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        type: string
+                        example: Webhook deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Merchants ─────────────────────────────────────────────────────────────────
+  /merchants/me:
+    get:
+      tags: [Merchants]
+      summary: Get merchant profile
+      description: Returns the authenticated merchant's profile.
+      operationId: getMerchantProfile
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Merchant profile
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Merchant'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [Merchants]
+      summary: Update merchant profile
+      description: Updates the merchant's business name and/or wallet address.
+      operationId: updateMerchantProfile
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                businessName:
+                  type: string
+                  minLength: 2
+                  maxLength: 100
+                  example: Updated Store Name
+                walletAddress:
+                  type: string
+                  nullable: true
+                  example: "0x00473a216f2b1d382759e612bf6029fa037e95b2"
+      responses:
+        '200':
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Merchant'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /merchants/me/stats:
+    get:
+      tags: [Merchants]
+      summary: Get dashboard stats
+      description: Returns aggregated payment statistics for the merchant dashboard.
+      operationId: getMerchantStats
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Merchant statistics
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/MerchantStats'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /merchants/me/api-keys:
+    get:
+      tags: [API Keys]
+      summary: List API keys
+      description: Returns all API keys for the merchant (secrets are never returned).
+      operationId: listApiKeys
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of API keys
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ApiKey'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags: [API Keys]
+      summary: Create an API key
+      description: |
+        Generates a new API key. The full `rawKey` is only returned once —
+        store it immediately.
+      operationId: createApiKey
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  maxLength: 50
+                  default: API Key
+                  example: Production Key
+      responses:
+        '201':
+          description: API key created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/NewApiKey'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /merchants/me/api-keys/{id}:
+    delete:
+      tags: [API Keys]
+      summary: Revoke an API key
+      description: Soft-deletes (revokes) an API key. It can no longer be used for authentication.
+      operationId: revokeApiKey
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+      responses:
+        '200':
+          description: API key revoked
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        type: string
+                        example: API key revoked successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'

@@ -1,16 +1,27 @@
 import { Router } from 'express';
-import { requireAuthOrApiKey } from '../middleware/auth.js';
+import type { Request, Response, NextFunction } from 'express';
 import { prisma } from '../lib/prisma.js';
-import { generateWebhookSecret, encryptWebhookSecret } from '../lib/webhook-crypto.js';
+import { requireAuthOrApiKey } from '../middleware/auth.js';
+import {
+  generateWebhookSecret,
+  encryptWebhookSecret,
+  decryptWebhookSecret,
+} from '../lib/webhook-crypto.js';
 import { createWebhookSchema, updateWebhookSchema } from '../schemas/webhook.js';
+import {
+  signPayload,
+  WEBHOOK_SIGNATURE_HEADER,
+  WEBHOOK_TIMESTAMP_HEADER,
+  WEBHOOK_EVENT_HEADER,
+} from '@qiflow/shared';
 
 const router = Router();
 
 // All webhook endpoints require authentication (JWT or API key)
 router.use(requireAuthOrApiKey);
 
-// ── POST /v1/webhooks (Register a Webhook) ───────────────────────────────────
-router.post('/', async (req, res, next) => {
+// ── POST / (Register Webhook) ─────────────────────────────────────────────────
+router.post('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const merchantId = req.merchant!.id;
     const input = createWebhookSchema.parse(req.body);
@@ -36,7 +47,7 @@ router.post('/', async (req, res, next) => {
         events: webhook.events,
         isActive: webhook.isActive,
         createdAt: webhook.createdAt,
-        secret: rawSecret, // shown once
+        secret: rawSecret,
       },
     });
   } catch (err) {
@@ -44,8 +55,8 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-// ── GET /v1/webhooks (List Webhooks) ──────────────────────────────────────────
-router.get('/', async (req, res, next) => {
+// ── GET / (List Webhooks) ────────────────────────────────────────────────────
+router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const merchantId = req.merchant!.id;
 
@@ -62,20 +73,22 @@ router.get('/', async (req, res, next) => {
       orderBy: { createdAt: 'desc' },
     });
 
-    res.json({ success: true, data: webhooks });
+    res.json({
+      success: true,
+      data: webhooks,
+    });
   } catch (err) {
     next(err);
   }
 });
 
-// ── PUT /v1/webhooks/:id (Rotate Secret & Update Webhook) ─────────────────────
-router.put('/:id', async (req, res, next) => {
+// ── PUT /:id (Rotate Secret & Update Webhook) ─────────────────────────────────
+router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const merchantId = req.merchant!.id;
-    const { id } = req.params;
+    const id = req.params.id as string;
     const input = updateWebhookSchema.parse(req.body);
 
-    // Verify webhook exists and belongs to the merchant
     const existing = await prisma.webhook.findFirst({
       where: { id, merchantId },
     });
@@ -83,7 +96,10 @@ router.put('/:id', async (req, res, next) => {
     if (!existing) {
       res.status(404).json({
         success: false,
-        error: { code: 'NOT_FOUND', message: 'Webhook endpoint not found' },
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Webhook endpoint not found',
+        },
       });
       return;
     }
@@ -110,7 +126,7 @@ router.put('/:id', async (req, res, next) => {
         isActive: updated.isActive,
         createdAt: updated.createdAt,
         updatedAt: updated.updatedAt,
-        secret: rawSecret, // return rotated secret once
+        secret: rawSecret,
       },
     });
   } catch (err) {
@@ -118,11 +134,168 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
-// ── DELETE /v1/webhooks/:id (Revoke/Delete Webhook) ───────────────────────────
-router.delete('/:id', async (req, res, next) => {
+// ── GET /deliveries (List Delivery Logs) ──────────────────────────────────────
+router.get('/deliveries', async (req: Request, res: Response) => {
   try {
     const merchantId = req.merchant!.id;
-    const { id } = req.params;
+    const limit = Math.min(
+      100,
+      Math.max(1, parseInt((req.query.limit as string) || '20', 10))
+    );
+
+    const deliveries = await prisma.webhookDelivery.findMany({
+      where: {
+        webhook: {
+          merchantId,
+        },
+      },
+      include: {
+        webhook: {
+          select: { url: true },
+        },
+        payment: {
+          select: { paymentCode: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+
+    res.json({
+      success: true,
+      data: deliveries.map((d) => ({
+        id: d.id,
+        url: d.webhook.url,
+        paymentCode: d.payment.paymentCode,
+        event: d.event,
+        status: d.status,
+        statusCode: d.statusCode,
+        attempt: d.attempt,
+        deliveredAt: d.deliveredAt,
+        createdAt: d.createdAt,
+      })),
+    });
+  } catch {
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to fetch webhook deliveries',
+      },
+    });
+  }
+});
+
+// ── POST /deliveries/:id/retry (Retry Webhook Delivery) ───────────────────────
+router.post(
+  '/deliveries/:id/retry',
+  async (req: Request, res: Response) => {
+    try {
+      const merchantId = req.merchant!.id;
+      const id = req.params.id as string;
+
+      const delivery = await prisma.webhookDelivery.findFirst({
+        where: {
+          id,
+          webhook: { merchantId },
+        },
+        include: {
+          webhook: true,
+        },
+      });
+
+      if (!delivery) {
+        res.status(404).json({
+          success: false,
+          error: {
+            code: 'NOT_FOUND',
+            message: 'Webhook delivery log not found',
+          },
+        });
+        return;
+      }
+
+      if (!delivery.webhook.isActive) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: 'WEBHOOK_INACTIVE',
+            message: 'Webhook endpoint is inactive',
+          },
+        });
+        return;
+      }
+
+      const secret = decryptWebhookSecret(delivery.webhook.secret);
+      const rawBody = Buffer.from(JSON.stringify(delivery.payload));
+      const signature = signPayload(rawBody, secret);
+      const timestamp = Math.floor(Date.now() / 1000);
+
+      let statusCode: number | null = null;
+      let responseBody: string | null = null;
+      let status: 'DELIVERED' | 'FAILED' = 'FAILED';
+
+      try {
+        const response = await fetch(delivery.webhook.url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            [WEBHOOK_SIGNATURE_HEADER]: signature,
+            [WEBHOOK_TIMESTAMP_HEADER]: timestamp.toString(),
+            [WEBHOOK_EVENT_HEADER]: delivery.event,
+          },
+          body: rawBody,
+          signal: AbortSignal.timeout(10_000),
+        });
+
+        statusCode = response.status;
+        responseBody = (await response.text()).slice(0, 1024);
+        status = response.ok ? 'DELIVERED' : 'FAILED';
+      } catch (err: unknown) {
+        responseBody =
+          err instanceof Error ? err.message.slice(0, 1024) : String(err).slice(0, 1024);
+        status = 'FAILED';
+        statusCode = 500;
+      }
+
+      const updated = await prisma.webhookDelivery.update({
+        where: { id: delivery.id },
+        data: {
+          attempt: delivery.attempt + 1,
+          status,
+          statusCode,
+          responseBody,
+          deliveredAt: status === 'DELIVERED' ? new Date() : null,
+        },
+      });
+
+      res.json({
+        success: true,
+        data: {
+          id: updated.id,
+          status: updated.status,
+          statusCode: updated.statusCode,
+          attempt: updated.attempt,
+          deliveredAt: updated.deliveredAt,
+        },
+      });
+    } catch {
+      res.status(500).json({
+        success: false,
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Failed to retry webhook dispatch',
+        },
+      });
+    }
+  }
+);
+
+// ── DELETE /:id (Delete Webhook) ───────────────────────────────────────────────
+router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const merchantId = req.merchant!.id;
+    const id = req.params.id as string;
 
     const existing = await prisma.webhook.findFirst({
       where: { id, merchantId },
@@ -131,7 +304,10 @@ router.delete('/:id', async (req, res, next) => {
     if (!existing) {
       res.status(404).json({
         success: false,
-        error: { code: 'NOT_FOUND', message: 'Webhook endpoint not found' },
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Webhook endpoint not found',
+        },
       });
       return;
     }
@@ -142,7 +318,9 @@ router.delete('/:id', async (req, res, next) => {
 
     res.json({
       success: true,
-      message: 'Webhook endpoint revoked successfully',
+      data: {
+        message: 'Webhook endpoint revoked successfully',
+      },
     });
   } catch (err) {
     next(err);

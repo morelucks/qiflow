@@ -27,6 +27,19 @@ const envSchema = z.object({
   WEBHOOK_SECRET_KEY: z
     .string()
     .regex(/^[0-9a-f]{64}$/i, 'WEBHOOK_SECRET_KEY must be a 32-byte hex string (64 hex chars)'),
+
+  // Rate limiting
+  RATE_LIMIT_AUTH_LOGIN_MAX: z.coerce.number().default(5),
+  RATE_LIMIT_AUTH_LOGIN_WINDOW_MS: z.coerce.number().default(60_000),
+  RATE_LIMIT_AUTH_REGISTER_MAX: z.coerce.number().default(3),
+  RATE_LIMIT_AUTH_REGISTER_WINDOW_MS: z.coerce.number().default(60_000),
+  RATE_LIMIT_AUTH_REFRESH_MAX: z.coerce.number().default(10),
+  RATE_LIMIT_AUTH_REFRESH_WINDOW_MS: z.coerce.number().default(60_000),
+  RATE_LIMIT_API_MAX: z.coerce.number().default(100),
+  RATE_LIMIT_API_WINDOW_MS: z.coerce.number().default(60_000),
+  RATE_LIMIT_UNAUTH_MAX: z.coerce.number().default(30),
+  RATE_LIMIT_UNAUTH_WINDOW_MS: z.coerce.number().default(60_000),
+
 });
 
 function loadEnv() {
