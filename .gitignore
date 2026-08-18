@@ -8,6 +8,9 @@ dist/
 build/
 .next/
 out/
+artifacts/
+cache/
+typechain-types/
 
 # ─── Environment variables (NEVER commit .env files) ─────────────────────────
 .env
