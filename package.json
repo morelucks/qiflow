@@ -4,7 +4,10 @@
   "private": true,
   "description": "QiFlow — Payment gateway for Quai Network",
   "workspaces": [
-    "apps/*",
+    "backend",
+    "frontend",
+    "contracts",
+    "circuits",
     "packages/*"
   ],
   "scripts": {

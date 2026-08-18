@@ -25,7 +25,7 @@ jobs:
         run: npm ci || npm install
 
       - name: Generate Prisma Client
-        run: npm run db:generate --workspace=@qiflow/api
+        run: npm run db:generate --workspace=@qiflow/backend
 
       - name: Lint Monorepo
         run: npm run lint
