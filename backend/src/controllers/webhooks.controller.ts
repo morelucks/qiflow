@@ -24,6 +24,19 @@ export class WebhooksController {
     }
   }
 
+static async updateWebhook(req: Request, res: Response, next: NextFunction) {
+  try {
+    const merchantId = req.merchant!.id;
+    const id = req.params.id as string;
+
+    const data = await WebhooksService.updateWebhook(merchantId, id);
+
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
   static async deleteWebhook(req: Request, res: Response, next: NextFunction) {
     try {
       const merchantId = req.merchant!.id;

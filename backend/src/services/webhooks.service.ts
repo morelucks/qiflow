@@ -1,3 +1,4 @@
+import { encryptWebhookSecret } from '../lib/webhook-crypto.js';
 import crypto from 'crypto';
 import { prisma } from '../lib/prisma.js';
 import type { CreateWebhookInput } from '../schemas/webhooks.schema.js';
@@ -5,22 +6,20 @@ import { createError } from '../middleware/errorHandler.js';
 
 export class WebhooksService {
   static async createWebhook(merchantId: string, input: CreateWebhookInput) {
-    const secret = `whsec_${crypto.randomBytes(24).toString('hex')}`;
-
+    const rawSecret = `whsec_${crypto.randomBytes(24).toString('hex')}`;
     const webhook = await prisma.webhook.create({
       data: {
         merchantId,
         url: input.url,
-        secret,
+        secret: encryptWebhookSecret(rawSecret),
         events: input.events,
         isActive: true,
       },
     });
-
     return {
       id: webhook.id,
       url: webhook.url,
-      secret: webhook.secret,
+      secret: rawSecret,
       events: webhook.events,
       isActive: webhook.isActive,
       createdAt: webhook.createdAt,
@@ -41,6 +40,35 @@ export class WebhooksService {
       isActive: w.isActive,
       createdAt: w.createdAt,
     }));
+  }
+
+  static async updateWebhook(
+    merchantId: string,
+    id: string,
+  ) {
+    const webhook = await prisma.webhook.findFirst({
+      where: { id, merchantId },
+    });
+    if (!webhook) {
+      throw createError('Webhook endpoint not found', 404, 'NOT_FOUND');
+    }
+    const rawSecret = `whsec_${crypto.randomBytes(24).toString('hex')}`;
+    const updated = await prisma.webhook.update({
+      where: { id: webhook.id },
+      data: {
+        secret: encryptWebhookSecret(rawSecret),
+      },
+    });
+
+    return {
+      id: updated.id,
+      url: updated.url,
+      secret: rawSecret,
+      events: updated.events,
+      isActive: updated.isActive,
+      createdAt: updated.createdAt,
+      updatedAt: updated.updatedAt,
+    };
   }
 
   static async deleteWebhook(merchantId: string, id: string) {

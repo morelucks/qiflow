@@ -8,6 +8,7 @@ router.use(requireAuthOrApiKey);
 
 router.post('/', WebhooksController.createWebhook);
 router.get('/', WebhooksController.listWebhooks);
+router.put('/:id', WebhooksController.updateWebhook);
 router.delete('/:id', WebhooksController.deleteWebhook);
 router.get('/deliveries', WebhooksController.listDeliveries);
 router.post('/deliveries/:id/retry', WebhooksController.retryDelivery);

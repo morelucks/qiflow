@@ -23,6 +23,11 @@ const envSchema = z.object({
   FRONTEND_URL: z.string().url().default('http://localhost:3000'),
   CHECKOUT_BASE_URL: z.string().url().default('http://localhost:3000'),
 
+  // Webhook signing — 32-byte AES-256-GCM key (64 hex chars)
+  WEBHOOK_SECRET_KEY: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/i, 'WEBHOOK_SECRET_KEY must be a 32-byte hex string (64 hex chars)'),
+
   // Rate limiting
   RATE_LIMIT_AUTH_LOGIN_MAX: z.coerce.number().default(5),
   RATE_LIMIT_AUTH_LOGIN_WINDOW_MS: z.coerce.number().default(60_000),
@@ -34,6 +39,7 @@ const envSchema = z.object({
   RATE_LIMIT_API_WINDOW_MS: z.coerce.number().default(60_000),
   RATE_LIMIT_UNAUTH_MAX: z.coerce.number().default(30),
   RATE_LIMIT_UNAUTH_WINDOW_MS: z.coerce.number().default(60_000),
+
 });
 
 function loadEnv() {
