@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import type { PaymentLink } from '../../../../types';
 import { Button } from '../../../../components/ui/Button';
@@ -16,7 +16,7 @@ export default function PaymentLinkCheckoutPage({ params }: { params: { linkCode
   const [creatingSession, setCreatingSession] = useState(false);
   const [activePaymentCode, setActivePaymentCode] = useState<string | null>(null);
 
-  const fetchLink = async () => {
+  const fetchLink = useCallback(async () => {
     try {
       const res = await apiClient<PaymentLink>(`/v1/payment-links/public/${linkCode}`);
       if (res.success && res.data) {
@@ -29,11 +29,11 @@ export default function PaymentLinkCheckoutPage({ params }: { params: { linkCode
     } finally {
       setLoading(false);
     }
-  };
+  }, [linkCode]);
 
   useEffect(() => {
     fetchLink();
-  }, [linkCode]);
+  }, [fetchLink]);
 
   const handleCreateCheckout = async (e: React.FormEvent) => {
     e.preventDefault();

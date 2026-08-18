@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import type { Payment } from '../../../types';
 import { Button } from '../../../components/ui/Button';
@@ -15,7 +15,7 @@ export default function SingleCheckoutPage({ params }: { params: { paymentCode: 
   const [copied, setCopied] = useState(false);
   const [paying, setPaying] = useState(false);
 
-  const fetchPayment = async () => {
+  const fetchPayment = useCallback(async () => {
     try {
       const res = await apiClient<Payment>(`/v1/payments/public/code/${paymentCode}`);
       if (res.success && res.data) {
@@ -28,13 +28,13 @@ export default function SingleCheckoutPage({ params }: { params: { paymentCode: 
     } finally {
       setLoading(false);
     }
-  };
+  }, [paymentCode]);
 
   useEffect(() => {
     fetchPayment();
     const interval = setInterval(fetchPayment, 3000);
     return () => clearInterval(interval);
-  }, [paymentCode]);
+  }, [fetchPayment]);
 
   const copyAddress = () => {
     if (!payment) return;

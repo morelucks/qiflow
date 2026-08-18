@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma.js';
 import type { UpdateMerchantInput } from '../schemas/merchants.schema.js';
+import { createError } from '../middleware/errorHandler.js';
 
 export class MerchantsService {
   static async getMerchantProfile(merchantId: string) {
@@ -23,7 +24,7 @@ export class MerchantsService {
     });
 
     if (!merchant) {
-      throw { statusCode: 404, code: 'NOT_FOUND', message: 'Merchant profile not found' };
+      throw createError('Merchant profile not found', 404, 'NOT_FOUND');
     }
 
     return merchant;

@@ -10,19 +10,36 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // QiFlow brand palette
+        // Official QiFlow Brand Palette
+        qiflow: {
+          ink: '#13102B',
+          indigo: '#1E1B4B',
+          violet: '#6C4AB6',
+          mint: '#00E6A8',
+          lilac: '#C9BCF0',
+          offwhite: '#F7F6FB',
+          white: '#FFFFFF',
+        },
         brand: {
-          50: '#f0fdf4',
-          100: '#dcfce7',
-          200: '#bbf7d0',
-          300: '#86efac',
-          400: '#4ade80',
-          500: '#22c55e',
-          600: '#16a34a',
-          700: '#15803d',
-          800: '#166534',
-          900: '#14532d',
-          950: '#052e16',
+          ink: '#13102B',
+          indigo: '#1E1B4B',
+          violet: '#6C4AB6',
+          mint: '#00E6A8',
+          lilac: '#C9BCF0',
+          offwhite: '#F7F6FB',
+          white: '#FFFFFF',
+          DEFAULT: '#6C4AB6',
+          50: '#F7F6FB',
+          100: '#e5e1f7',
+          200: '#C9BCF0',
+          300: '#a894e6',
+          400: '#876cdb',
+          500: '#6C4AB6',
+          600: '#55379b',
+          700: '#3e257a',
+          800: '#1E1B4B',
+          900: '#13102B',
+          950: '#0a0817',
         },
       },
       fontFamily: {

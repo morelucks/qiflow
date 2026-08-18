@@ -6,21 +6,29 @@
 
 @layer base {
   :root {
-    --color-border: 214.3 31.8% 91.4%;
-    --color-background: 0 0% 100%;
-    --color-foreground: 222.2 84% 4.9%;
-    --color-primary: 142.1 76.2% 36.3%;
-    --color-muted: 215.4 16.3% 46.9%;
+    --brand-ink: #13102B;
+    --brand-indigo: #1E1B4B;
+    --brand-violet: #6C4AB6;
+    --brand-mint: #00E6A8;
+    --brand-lilac: #C9BCF0;
+    --brand-offwhite: #F7F6FB;
+    --brand-white: #FFFFFF;
+
+    --color-border: 250 20% 90%;
+    --color-background: 252 50% 98%; /* #F7F6FB Off-White */
+    --color-foreground: 247 45% 12%; /* #13102B Ink */
+    --color-primary: 260 52% 53%; /* #6C4AB6 Violet */
+    --color-muted: 256 30% 55%;
     --color-destructive: 0 84.2% 60.2%;
     --radius: 0.5rem;
   }
 
   .dark {
-    --color-border: 217.2 32.6% 17.5%;
-    --color-background: 222.2 84% 4.9%;
-    --color-foreground: 210 40% 98%;
-    --color-primary: 142.1 70.6% 45.3%;
-    --color-muted: 215 20.2% 65.1%;
+    --color-border: 247 45% 20%;
+    --color-background: 248 48% 20%; /* #1E1B4B Primary / Deep Indigo */
+    --color-foreground: 0 0% 100%; /* #FFFFFF White headlines */
+    --color-primary: 260 52% 53%; /* #6C4AB6 Violet */
+    --color-muted: 256 60% 84%; /* #C9BCF0 Lilac muted text */
     --color-destructive: 0 62.8% 30.6%;
   }
 

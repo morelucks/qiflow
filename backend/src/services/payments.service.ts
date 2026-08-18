@@ -1,13 +1,11 @@
 import crypto from 'crypto';
+import type { PaymentStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import type { CreatePaymentInput, SimulatePaymentInput } from '../schemas/payments.schema.js';
+import type { MerchantContext } from '../types/index.js';
+import { createError } from '../middleware/errorHandler.js';
 
-export interface MerchantContext {
-  id: string;
-  email: string;
-  businessName?: string;
-  walletAddress?: string | null;
-}
+export type { MerchantContext };
 
 export class PaymentsService {
   static async getPublicPayment(code: string) {
@@ -24,7 +22,7 @@ export class PaymentsService {
     });
 
     if (!payment) {
-      throw { statusCode: 404, code: 'NOT_FOUND', message: 'Payment code not found' };
+      throw createError('Payment code not found', 404, 'NOT_FOUND');
     }
 
     return {
@@ -58,12 +56,8 @@ export class PaymentsService {
         expiresAt,
         status: 'CREATED',
         ...(input.description ? { description: input.description } : {}),
-        ...(input.paymentLinkId ? { paymentLinkId: input.paymentLinkId } : {}),
-        ...(input.metadata ? { metadata: JSON.parse(JSON.stringify(input.metadata)) } : {}),
       },
     });
-
-    const baseUrl = process.env.CHECKOUT_BASE_URL || process.env.FRONTEND_URL || 'http://localhost:3000';
 
     return {
       id: payment.id,
@@ -75,24 +69,25 @@ export class PaymentsService {
       receivingAddress: payment.receivingAddress,
       expiresAt: payment.expiresAt,
       createdAt: payment.createdAt,
-      checkoutUrl: `${baseUrl}/pay/${payment.paymentCode}`,
     };
   }
 
-  static async listPayments(merchantId: string, page: number, limit: number, status?: string) {
-    const where: Record<string, unknown> = { merchantId };
-    if (status) {
-      where.status = status.toUpperCase();
-    }
+  static async listPayments(merchantId: string, page: number = 1, limit: number = 20, status?: string) {
+    const skip = (page - 1) * limit;
 
-    const [total, payments] = await Promise.all([
-      prisma.payment.count({ where }),
+    const where = {
+      merchantId,
+      ...(status ? { status: status as PaymentStatus } : {}),
+    };
+
+    const [payments, total] = await Promise.all([
       prisma.payment.findMany({
         where,
         orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * limit,
+        skip,
         take: limit,
       }),
+      prisma.payment.count({ where }),
     ]);
 
     return {
@@ -127,7 +122,7 @@ export class PaymentsService {
     });
 
     if (!payment) {
-      throw { statusCode: 404, code: 'NOT_FOUND', message: 'Payment not found' };
+      throw createError('Payment not found', 404, 'NOT_FOUND');
     }
 
     return {
@@ -154,7 +149,7 @@ export class PaymentsService {
     });
 
     if (!payment) {
-      throw { statusCode: 404, code: 'NOT_FOUND', message: 'Payment not found' };
+      throw createError('Payment not found', 404, 'NOT_FOUND');
     }
 
     const txHash = input.txHash || `0x${crypto.randomBytes(32).toString('hex')}`;
@@ -169,42 +164,49 @@ export class PaymentsService {
       },
     });
 
-    // Trigger webhook dispatches
+    // Trigger webhooks for payment status change
     const webhooks = await prisma.webhook.findMany({
-      where: { merchantId, isActive: true },
+      where: {
+        merchantId,
+        isActive: true,
+      },
     });
 
-    const eventName = input.status === 'COMPLETED' ? 'payment.completed' : 'payment.failed';
-    for (const hook of webhooks) {
-      if (hook.events.includes(eventName) || hook.events.includes('*')) {
-        prisma.webhookDelivery
-          .create({
-            data: {
-              webhookId: hook.id,
-              paymentId: updatedPayment.id,
-              event: eventName,
-              payload: {
-                event: eventName,
-                paymentCode: updatedPayment.paymentCode,
-                amount: updatedPayment.amount.toString(),
-                currency: updatedPayment.currency,
-                status: updatedPayment.status,
-                txHash: updatedPayment.txHash,
-                timestamp: new Date().toISOString(),
-              },
-              status: 'DELIVERED',
-              statusCode: 200,
-              responseBody: JSON.stringify({ received: true }),
-              deliveredAt: new Date(),
-            },
-          })
-          .catch(() => {});
+    const eventName = `payment.${input.status.toLowerCase()}`;
+
+    for (const webhook of webhooks) {
+      if (webhook.events.includes(eventName) || webhook.events.includes('payment.*')) {
+        const payload = {
+          event: eventName,
+          payment: {
+            id: updatedPayment.id,
+            paymentCode: updatedPayment.paymentCode,
+            amount: updatedPayment.amount.toString(),
+            currency: updatedPayment.currency,
+            status: updatedPayment.status,
+            txHash: updatedPayment.txHash,
+            completedAt: updatedPayment.completedAt,
+          },
+        };
+
+        await prisma.webhookDelivery.create({
+          data: {
+            webhookId: webhook.id,
+            paymentId: updatedPayment.id,
+            event: eventName,
+            payload,
+            status: 'PENDING',
+            attempt: 1,
+          },
+        });
       }
     }
 
     return {
       id: updatedPayment.id,
       paymentCode: updatedPayment.paymentCode,
+      amount: updatedPayment.amount.toString(),
+      currency: updatedPayment.currency,
       status: updatedPayment.status,
       txHash: updatedPayment.txHash,
       completedAt: updatedPayment.completedAt,

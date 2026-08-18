@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { prisma } from '../lib/prisma.js';
 import type { CreatePaymentLinkInput, UpdatePaymentLinkInput } from '../schemas/payment-links.schema.js';
+import { createError } from '../middleware/errorHandler.js';
 
 function generateLinkCode(): string {
   return `pl_${crypto.randomBytes(4).toString('hex')}`;
@@ -42,7 +43,7 @@ export class PaymentLinksService {
     });
 
     if (!link || !link.isActive) {
-      throw { statusCode: 404, code: 'LINK_INACTIVE', message: 'This payment link is no longer active or does not exist.' };
+      throw createError('This payment link is no longer active or does not exist.', 404, 'LINK_INACTIVE');
     }
 
     return {
@@ -83,7 +84,7 @@ export class PaymentLinksService {
     });
 
     if (!link || !link.isActive) {
-      throw { statusCode: 400, code: 'LINK_INACTIVE', message: 'This payment link is no longer active or does not exist.' };
+      throw createError('This payment link is no longer active or does not exist.', 400, 'LINK_INACTIVE');
     }
 
     let finalAmount = link.amount ? link.amount.toString() : '5.00';
@@ -243,7 +244,7 @@ export class PaymentLinksService {
     });
 
     if (!link) {
-      throw { statusCode: 404, code: 'NOT_FOUND', message: 'Payment link not found' };
+      throw createError('Payment link not found', 404, 'NOT_FOUND');
     }
 
     return {
@@ -269,7 +270,7 @@ export class PaymentLinksService {
     });
 
     if (!existing) {
-      throw { statusCode: 404, code: 'NOT_FOUND', message: 'Payment link not found' };
+      throw createError('Payment link not found', 404, 'NOT_FOUND');
     }
 
     const updated = await prisma.paymentLink.update({
@@ -323,7 +324,7 @@ export class PaymentLinksService {
     });
 
     if (!existing) {
-      throw { statusCode: 404, code: 'NOT_FOUND', message: 'Payment link not found' };
+      throw createError('Payment link not found', 404, 'NOT_FOUND');
     }
 
     const deactivated = await prisma.paymentLink.update({

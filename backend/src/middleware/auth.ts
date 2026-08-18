@@ -2,12 +2,8 @@ import type { Request, Response, NextFunction } from 'express';
 import { hashApiKey, verifyAccessToken } from '../lib/auth.js';
 import { prisma } from '../lib/prisma.js';
 
-export interface AuthenticatedMerchant {
-  id: string;
-  email: string;
-  businessName?: string;
-  walletAddress?: string | null;
-}
+import type { AuthenticatedMerchant } from '../types/index.js';
+export type { AuthenticatedMerchant };
 
 /* eslint-disable @typescript-eslint/no-namespace */
 declare global {

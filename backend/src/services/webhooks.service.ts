@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { prisma } from '../lib/prisma.js';
 import type { CreateWebhookInput } from '../schemas/webhooks.schema.js';
+import { createError } from '../middleware/errorHandler.js';
 
 export class WebhooksService {
   static async createWebhook(merchantId: string, input: CreateWebhookInput) {
@@ -48,7 +49,7 @@ export class WebhooksService {
     });
 
     if (!webhook) {
-      throw { statusCode: 404, code: 'NOT_FOUND', message: 'Webhook endpoint not found' };
+      throw createError('Webhook endpoint not found', 404, 'NOT_FOUND');
     }
 
     await prisma.webhook.delete({ where: { id: webhook.id } });
@@ -100,7 +101,7 @@ export class WebhooksService {
     });
 
     if (!delivery) {
-      throw { statusCode: 404, code: 'NOT_FOUND', message: 'Webhook delivery log not found' };
+      throw createError('Webhook delivery log not found', 404, 'NOT_FOUND');
     }
 
     const payloadString = JSON.stringify(delivery.payload);

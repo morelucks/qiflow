@@ -2,6 +2,7 @@ import bcrypt from 'bcrypt';
 import { prisma } from '../lib/prisma.js';
 import { generateTokens, generateApiKey, verifyRefreshToken } from '../lib/auth.js';
 import type { RegisterInput, LoginInput } from '../schemas/auth.schema.js';
+import { createError } from '../middleware/errorHandler.js';
 
 export class AuthService {
   static async registerMerchant(input: RegisterInput) {
@@ -10,7 +11,7 @@ export class AuthService {
     });
 
     if (existing) {
-      throw { statusCode: 409, code: 'EMAIL_EXISTS', message: 'An account with this email address already exists.' };
+      throw createError('An account with this email address already exists.', 409, 'EMAIL_EXISTS');
     }
 
     const passwordHash = await bcrypt.hash(input.password, 12);
@@ -63,13 +64,13 @@ export class AuthService {
     });
 
     if (!merchant) {
-      throw { statusCode: 401, code: 'INVALID_CREDENTIALS', message: 'Invalid email address or password.' };
+      throw createError('Invalid email address or password.', 401, 'INVALID_CREDENTIALS');
     }
 
     const isPasswordValid = await bcrypt.compare(input.password, merchant.passwordHash);
 
     if (!isPasswordValid) {
-      throw { statusCode: 401, code: 'INVALID_CREDENTIALS', message: 'Invalid email address or password.' };
+      throw createError('Invalid email address or password.', 401, 'INVALID_CREDENTIALS');
     }
 
     const tokens = generateTokens(merchant.id, merchant.email);
@@ -91,7 +92,7 @@ export class AuthService {
     try {
       payload = verifyRefreshToken(refreshToken);
     } catch {
-      throw { statusCode: 401, code: 'INVALID_REFRESH_TOKEN', message: 'Invalid or expired refresh token.' };
+      throw createError('Invalid or expired refresh token.', 401, 'INVALID_REFRESH_TOKEN');
     }
 
     const merchant = await prisma.merchant.findUnique({
@@ -99,7 +100,7 @@ export class AuthService {
     });
 
     if (!merchant) {
-      throw { statusCode: 401, code: 'MERCHANT_NOT_FOUND', message: 'Merchant associated with token no longer exists.' };
+      throw createError('Merchant associated with token no longer exists.', 401, 'MERCHANT_NOT_FOUND');
     }
 
     return generateTokens(merchant.id, merchant.email);
