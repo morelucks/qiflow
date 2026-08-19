@@ -93,8 +93,11 @@ async function runIntegrationTest() {
       }),
     });
     const payData = (await payRes.json()) as any;
-    console.log('   Status:', payRes.status, 'Payment Code:', payData.data?.paymentCode);
+    console.log('   Status:', payRes.status, 'Payment Code:', payData.data?.paymentCode, 'Checkout URL:', payData.data?.checkoutUrl);
     if (payRes.status !== 201) throw new Error('Payment creation failed');
+    if (!payData.data?.checkoutUrl || !payData.data.checkoutUrl.endsWith(`/pay/${payData.data.paymentCode}`)) {
+      throw new Error('Payment creation failed: checkoutUrl missing or incorrect');
+    }
 
     const paymentCode = payData.data.paymentCode;
     const paymentId = payData.data.id;

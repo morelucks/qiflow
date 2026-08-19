@@ -40,7 +40,14 @@ export default function NewPaymentPage() {
 
       const data = await res.json();
       if (data.success) {
-        setCreatedPayment(data.data);
+        const paymentData = data.data;
+        const fallbackUrl = paymentData?.paymentCode
+          ? `${window.location.origin}/pay/${paymentData.paymentCode}`
+          : '';
+        setCreatedPayment({
+          ...paymentData,
+          checkoutUrl: paymentData.checkoutUrl || fallbackUrl,
+        });
       } else {
         alert(data.error?.message || 'Failed to create payment');
       }
@@ -52,7 +59,7 @@ export default function NewPaymentPage() {
   };
 
   const copyUrl = () => {
-    if (!createdPayment) return;
+    if (!createdPayment?.checkoutUrl) return;
     navigator.clipboard.writeText(createdPayment.checkoutUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -142,12 +149,14 @@ export default function NewPaymentPage() {
               <input
                 type="text"
                 readOnly
-                value={createdPayment.checkoutUrl}
+                value={createdPayment.checkoutUrl || ''}
+                placeholder="Checkout URL unavailable"
                 className="w-full px-3 py-1.5 text-xs bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-800 dark:text-gray-200 font-mono"
               />
               <button
                 onClick={copyUrl}
-                className="px-3 py-1.5 text-xs font-semibold bg-brand-600 text-white rounded-lg hover:bg-brand-500 transition-colors whitespace-nowrap"
+                disabled={!createdPayment.checkoutUrl}
+                className="px-3 py-1.5 text-xs font-semibold bg-brand-600 text-white rounded-lg hover:bg-brand-500 transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {copied ? 'Copied!' : 'Copy'}
               </button>
