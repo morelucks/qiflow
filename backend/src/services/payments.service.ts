@@ -7,6 +7,11 @@ import { createError } from '../middleware/errorHandler.js';
 
 export type { MerchantContext };
 
+function getPaymentCheckoutUrl(paymentCode: string): string {
+  const baseUrl = process.env.CHECKOUT_BASE_URL || process.env.FRONTEND_URL || 'http://localhost:3000';
+  return `${baseUrl}/pay/${paymentCode}`;
+}
+
 export class PaymentsService {
   static async getPublicPayment(code: string) {
     const payment = await prisma.payment.findUnique({
@@ -35,6 +40,7 @@ export class PaymentsService {
       receivingAddress: payment.receivingAddress,
       txHash: payment.txHash,
       merchantName: payment.merchant.businessName,
+      checkoutUrl: getPaymentCheckoutUrl(payment.paymentCode),
       expiresAt: payment.expiresAt,
       createdAt: payment.createdAt,
     };
@@ -67,6 +73,7 @@ export class PaymentsService {
       description: payment.description,
       status: payment.status,
       receivingAddress: payment.receivingAddress,
+      checkoutUrl: getPaymentCheckoutUrl(payment.paymentCode),
       expiresAt: payment.expiresAt,
       createdAt: payment.createdAt,
     };
@@ -100,6 +107,7 @@ export class PaymentsService {
         status: p.status,
         receivingAddress: p.receivingAddress,
         txHash: p.txHash,
+        checkoutUrl: getPaymentCheckoutUrl(p.paymentCode),
         expiresAt: p.expiresAt,
         completedAt: p.completedAt,
         createdAt: p.createdAt,
@@ -134,6 +142,7 @@ export class PaymentsService {
       status: payment.status,
       receivingAddress: payment.receivingAddress,
       txHash: payment.txHash,
+      checkoutUrl: getPaymentCheckoutUrl(payment.paymentCode),
       expiresAt: payment.expiresAt,
       completedAt: payment.completedAt,
       createdAt: payment.createdAt,
