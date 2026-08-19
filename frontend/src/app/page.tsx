@@ -93,9 +93,14 @@ export default function HomePage() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-gray-200 dark:border-gray-800 px-6 py-8 text-center text-sm text-gray-400">
-        © {new Date().getFullYear()} QiFlow. MIT License.
+      <footer className="border-t border-gray-200 dark:border-gray-800 px-6 py-8 text-center text-sm text-gray-400 flex flex-col sm:flex-row items-center justify-between max-w-5xl mx-auto w-full">
+        <span>© {new Date().getFullYear()} QiFlow. MIT License.</span>
+        <div className="flex gap-4 mt-2 sm:mt-0">
+          <Link href="/terms" className="hover:underline">Terms of Service</Link>
+          <Link href="/privacy" className="hover:underline">Privacy Policy</Link>
+        </div>
       </footer>
     </main>
   );
 }
+
