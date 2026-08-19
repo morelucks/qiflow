@@ -1,163 +1,179 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/utils/Pausable.sol";
-
 /**
  * @title QiFlowEscrow
- * @notice Optional smart contract escrow system for high-value or disputed transactions on Quai Network.
+ * @notice Milestone-based and escrow-backed payment settlement for QiFlow on Quai Network.
  */
-contract QiFlowEscrow is Ownable, ReentrancyGuard, Pausable {
+contract QiFlowEscrow {
+    enum EscrowStatus { Created, Funded, Released, Refunded, Disputed, Resolved }
 
-    enum EscrowStatus { CREATED, FUNDED, RELEASED, REFUNDED, DISPUTED, RESOLVED }
-
-    struct EscrowItem {
-        bytes32 escrowId;      // Unique escrow ID hash
-        address payable payer; // Customer locking funds
-        address payable payee; // Merchant / recipient
-        address arbiter;       // Dispute arbiter (QiFlow platform address)
-        uint256 amount;        // Amount in wei
-        EscrowStatus status;   // Current escrow lifecycle state
-        uint256 timelock;      // Expiration / auto-release timestamp
-        uint256 createdAt;     // Creation timestamp
+    struct Milestone {
+        string description;
+        uint256 amount;
+        bool approved;
+        bool released;
     }
 
-    mapping(bytes32 => EscrowItem) public escrows;
+    struct EscrowSession {
+        bytes32 escrowId;
+        address payer;
+        address payee;
+        address arbiter;
+        uint256 totalAmount;
+        uint256 feeBps;
+        EscrowStatus status;
+        uint256 createdAt;
+        uint256 milestoneCount;
+    }
 
-    event EscrowCreated(
-        bytes32 indexed escrowId,
-        address indexed payer,
-        address indexed payee,
-        address arbiter,
-        uint256 amount,
-        uint256 timelock
-    );
+    address public owner;
+    address public platformWallet;
+    uint256 public defaultFeeBps;
 
-    event EscrowReleased(bytes32 indexed escrowId, address indexed payee, uint256 amount);
-    event EscrowRefunded(bytes32 indexed escrowId, address indexed payer, uint256 amount);
-    event EscrowDisputed(bytes32 indexed escrowId, address indexed raisedBy);
-    event DisputeResolved(bytes32 indexed escrowId, uint256 payeeShare, uint256 payerShare);
+    uint256 public constant MAX_FEE_BPS = 1000;
+    uint256 public constant BPS_DENOMINATOR = 10000;
 
-    constructor() Ownable(msg.sender) {}
+    bool public paused;
+    uint256 private _status;
 
-    /**
-     * @notice Creates and funds an escrow deposit.
-     */
+    mapping(bytes32 => EscrowSession) public escrowSessions;
+    mapping(bytes32 => mapping(uint256 => Milestone)) public escrowMilestones;
+    mapping(address => bool) public authorizedRelayers;
+
+    event EscrowCreated(bytes32 indexed escrowId, address indexed payer, address indexed payee, address arbiter, uint256 totalAmount, uint256 feeBps);
+    event EscrowFunded(bytes32 indexed escrowId, uint256 amount);
+    event MilestoneApproved(bytes32 indexed escrowId, uint256 indexed milestoneIndex);
+    event MilestoneReleased(bytes32 indexed escrowId, uint256 indexed milestoneIndex, uint256 amount, uint256 feeAmount);
+    event EscrowRefunded(bytes32 indexed escrowId, uint256 amount);
+    event EscrowDisputed(bytes32 indexed escrowId, address indexed initiator);
+    event EscrowResolved(bytes32 indexed escrowId, uint256 payeeAmount, uint256 payerAmount);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "QiFlow: caller is not the owner");
+        _;
+    }
+
+    modifier onlyAuthorized() {
+        require(authorizedRelayers[msg.sender] || msg.sender == owner, "QiFlow: not authorized");
+        _;
+    }
+
+    modifier whenNotPaused() {
+        require(!paused, "QiFlow: paused");
+        _;
+    }
+
+    modifier nonReentrant() {
+        require(_status != 2, "ReentrancyGuard: reentrant call");
+        _status = 2;
+        _;
+        _status = 1;
+    }
+
+    constructor(address _platformWallet, uint256 _defaultFeeBps) {
+        require(_platformWallet != address(0), "QiFlow: zero address platform wallet");
+        require(_defaultFeeBps <= MAX_FEE_BPS, "QiFlow: fee exceeds max");
+        owner = msg.sender;
+        platformWallet = _platformWallet;
+        defaultFeeBps = _defaultFeeBps;
+        _status = 1;
+        emit OwnershipTransferred(address(0), msg.sender);
+    }
+
     function createEscrow(
         bytes32 _escrowId,
-        address payable _payee,
+        address _payee,
         address _arbiter,
-        uint256 _timelock
-    ) external payable nonReentrant whenNotPaused {
-        require(_escrowId != bytes32(0), "QiFlowEscrow: invalid escrow ID");
-        require(_payee != address(0), "QiFlowEscrow: zero payee address");
-        require(_arbiter != address(0), "QiFlowEscrow: zero arbiter address");
-        require(msg.value > 0, "QiFlowEscrow: amount must be > 0");
-        require(_timelock > block.timestamp, "QiFlowEscrow: timelock must be in future");
-        require(escrows[_escrowId].payer == address(0), "QiFlowEscrow: escrow already exists");
+        uint256 _feeBps,
+        string[] calldata _milestoneDescs,
+        uint256[] calldata _milestoneAmounts
+    ) external payable whenNotPaused nonReentrant {
+        require(_escrowId != bytes32(0), "QiFlow: invalid escrow ID");
+        require(_payee != address(0), "QiFlow: zero payee address");
+        require(_feeBps <= MAX_FEE_BPS, "QiFlow: fee exceeds max");
+        require(_milestoneDescs.length > 0, "QiFlow: no milestones");
+        require(_milestoneDescs.length == _milestoneAmounts.length, "QiFlow: mismatch milestones");
+        require(escrowSessions[_escrowId].payer == address(0), "QiFlow: escrow exists");
 
-        escrows[_escrowId] = EscrowItem({
+        uint256 total = 0;
+        for (uint256 i = 0; i < _milestoneAmounts.length; i++) {
+            require(_milestoneAmounts[i] > 0, "QiFlow: milestone amount 0");
+            total += _milestoneAmounts[i];
+            escrowMilestones[_escrowId][i] = Milestone({
+                description: _milestoneDescs[i],
+                amount: _milestoneAmounts[i],
+                approved: false,
+                released: false
+            });
+        }
+
+        require(msg.value == total, "QiFlow: funded amount mismatch");
+
+        escrowSessions[_escrowId] = EscrowSession({
             escrowId: _escrowId,
-            payer: payable(msg.sender),
+            payer: msg.sender,
             payee: _payee,
             arbiter: _arbiter,
-            amount: msg.value,
-            status: EscrowStatus.FUNDED,
-            timelock: _timelock,
-            createdAt: block.timestamp
+            totalAmount: total,
+            feeBps: _feeBps,
+            status: EscrowStatus.Funded,
+            createdAt: block.timestamp,
+            milestoneCount: _milestoneAmounts.length
         });
 
-        emit EscrowCreated(_escrowId, msg.sender, _payee, _arbiter, msg.value, _timelock);
+        emit EscrowCreated(_escrowId, msg.sender, _payee, _arbiter, total, _feeBps);
+        emit EscrowFunded(_escrowId, total);
     }
 
-    /**
-     * @notice Releases escrowed funds to the payee.
-     */
-    function releaseFunds(bytes32 _escrowId) external nonReentrant whenNotPaused {
-        EscrowItem storage item = escrows[_escrowId];
-        require(item.status == EscrowStatus.FUNDED, "QiFlowEscrow: escrow not funded");
-        require(
-            msg.sender == item.payer || msg.sender == item.arbiter || block.timestamp >= item.timelock,
-            "QiFlowEscrow: unauthorized to release"
-        );
+    function releaseMilestone(bytes32 _escrowId, uint256 _milestoneIndex) external nonReentrant whenNotPaused {
+        EscrowSession storage session = escrowSessions[_escrowId];
+        require(session.status == EscrowStatus.Funded || session.status == EscrowStatus.Created, "QiFlow: invalid status");
+        require(msg.sender == session.payer || msg.sender == owner, "QiFlow: unauthorized release");
+        require(_milestoneIndex < session.milestoneCount, "QiFlow: invalid milestone index");
 
-        item.status = EscrowStatus.RELEASED;
+        Milestone storage m = escrowMilestones[_escrowId][_milestoneIndex];
+        require(!m.released, "QiFlow: milestone already released");
 
-        (bool success, ) = item.payee.call{value: item.amount}("");
-        require(success, "QiFlowEscrow: release transfer failed");
+        m.approved = true;
+        m.released = true;
 
-        emit EscrowReleased(_escrowId, item.payee, item.amount);
-    }
+        uint256 feeAmount = (m.amount * session.feeBps) / BPS_DENOMINATOR;
+        uint256 payeeAmount = m.amount - feeAmount;
 
-    /**
-     * @notice Refunds escrowed funds to the payer.
-     */
-    function refundPayer(bytes32 _escrowId) external nonReentrant whenNotPaused {
-        EscrowItem storage item = escrows[_escrowId];
-        require(item.status == EscrowStatus.FUNDED, "QiFlowEscrow: escrow not funded");
-        require(
-            msg.sender == item.payee || msg.sender == item.arbiter,
-            "QiFlowEscrow: unauthorized to refund"
-        );
-
-        item.status = EscrowStatus.REFUNDED;
-
-        (bool success, ) = item.payer.call{value: item.amount}("");
-        require(success, "QiFlowEscrow: refund transfer failed");
-
-        emit EscrowRefunded(_escrowId, item.payer, item.amount);
-    }
-
-    /**
-     * @notice Flags an active escrow as disputed.
-     */
-    function raiseDispute(bytes32 _escrowId) external whenNotPaused {
-        EscrowItem storage item = escrows[_escrowId];
-        require(item.status == EscrowStatus.FUNDED, "QiFlowEscrow: escrow not funded");
-        require(
-            msg.sender == item.payer || msg.sender == item.payee,
-            "QiFlowEscrow: only parties can dispute"
-        );
-
-        item.status = EscrowStatus.DISPUTED;
-        emit EscrowDisputed(_escrowId, msg.sender);
-    }
-
-    /**
-     * @notice Arbiter resolves a disputed escrow, splitting funds according to decision.
-     */
-    function resolveDispute(
-        bytes32 _escrowId,
-        uint256 _payeeShare,
-        uint256 _payerShare
-    ) external nonReentrant whenNotPaused {
-        EscrowItem storage item = escrows[_escrowId];
-        require(item.status == EscrowStatus.DISPUTED, "QiFlowEscrow: escrow not disputed");
-        require(msg.sender == item.arbiter || msg.sender == owner(), "QiFlowEscrow: only arbiter can resolve");
-        require(_payeeShare + _payerShare == item.amount, "QiFlowEscrow: shares sum must equal total");
-
-        item.status = EscrowStatus.RESOLVED;
-
-        if (_payeeShare > 0) {
-            (bool payeeSuccess, ) = item.payee.call{value: _payeeShare}("");
-            require(payeeSuccess, "QiFlowEscrow: payee share transfer failed");
+        if (feeAmount > 0) {
+            (bool feeSuccess, ) = payable(platformWallet).call{value: feeAmount}("");
+            require(feeSuccess, "QiFlow: platform fee transfer failed");
         }
 
-        if (_payerShare > 0) {
-            (bool payerSuccess, ) = item.payer.call{value: _payerShare}("");
-            require(payerSuccess, "QiFlowEscrow: payer share transfer failed");
-        }
+        (bool payeeSuccess, ) = payable(session.payee).call{value: payeeAmount}("");
+        require(payeeSuccess, "QiFlow: payee transfer failed");
 
-        emit DisputeResolved(_escrowId, _payeeShare, _payerShare);
+        emit MilestoneApproved(_escrowId, _milestoneIndex);
+        emit MilestoneReleased(_escrowId, _milestoneIndex, payeeAmount, feeAmount);
     }
 
-    function pause() external onlyOwner {
-        _pause();
+    function refundEscrow(bytes32 _escrowId) external nonReentrant {
+        EscrowSession storage session = escrowSessions[_escrowId];
+        require(session.status == EscrowStatus.Funded, "QiFlow: not funded");
+        require(msg.sender == session.payee || msg.sender == session.arbiter || msg.sender == owner, "QiFlow: unauthorized refund");
+
+        session.status = EscrowStatus.Refunded;
+
+        (bool success, ) = payable(session.payer).call{value: session.totalAmount}("");
+        require(success, "QiFlow: refund transfer failed");
+
+        emit EscrowRefunded(_escrowId, session.totalAmount);
     }
 
-    function unpause() external onlyOwner {
-        _unpause();
+    function setPlatformWallet(address _wallet) external onlyOwner {
+        require(_wallet != address(0), "QiFlow: zero address");
+        platformWallet = _wallet;
+    }
+
+    function setDefaultFeeBps(uint256 _feeBps) external onlyOwner {
+        require(_feeBps <= MAX_FEE_BPS, "QiFlow: fee exceeds max");
+        defaultFeeBps = _feeBps;
     }
 }

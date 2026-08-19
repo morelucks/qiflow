@@ -1,16 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/utils/Pausable.sol";
-
 /**
  * @title QiFlowPaymentRouter
  * @notice On-chain payment session router and fee distributor for QiFlow on Quai Network.
  * @dev Allows authorized backend relayers to register payment sessions and customers to settle payments.
  */
-contract QiFlowPaymentRouter is Ownable, ReentrancyGuard, Pausable {
+contract QiFlowPaymentRouter {
 
     struct PaymentSession {
         bytes32 paymentId;     // Unique payment ID hash
@@ -23,6 +19,9 @@ contract QiFlowPaymentRouter is Ownable, ReentrancyGuard, Pausable {
         uint256 expiresAt;     // Expiration timestamp
     }
 
+    // Contract owner
+    address public owner;
+
     // Platform fee receiving wallet
     address public platformWallet;
 
@@ -34,6 +33,12 @@ contract QiFlowPaymentRouter is Ownable, ReentrancyGuard, Pausable {
 
     // Basis points denominator (10000 = 100%)
     uint256 public constant BPS_DENOMINATOR = 10000;
+
+    // Pause state
+    bool public paused;
+
+    // Reentrancy status
+    uint256 private _status;
 
     // Payment sessions mapping
     mapping(bytes32 => PaymentSession) public paymentSessions;
@@ -69,20 +74,38 @@ contract QiFlowPaymentRouter is Ownable, ReentrancyGuard, Pausable {
     event PlatformWalletUpdated(address oldWallet, address newWallet);
     event RelayerAdded(address indexed relayer);
     event RelayerRemoved(address indexed relayer);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
-    modifier onlyAuthorized() {
-        require(
-            authorizedRelayers[msg.sender] || msg.sender == owner(),
-            "QiFlow: not authorized"
-        );
+    modifier onlyOwner() {
+        require(msg.sender == owner, "QiFlow: caller is not the owner");
         _;
     }
 
-    constructor(address _platformWallet, uint256 _defaultFeeBps) Ownable(msg.sender) {
+    modifier onlyAuthorized() {
+        require(authorizedRelayers[msg.sender] || msg.sender == owner, "QiFlow: not authorized");
+        _;
+    }
+
+    modifier whenNotPaused() {
+        require(!paused, "QiFlow: paused");
+        _;
+    }
+
+    modifier nonReentrant() {
+        require(_status != 2, "ReentrancyGuard: reentrant call");
+        _status = 2;
+        _;
+        _status = 1;
+    }
+
+    constructor(address _platformWallet, uint256 _defaultFeeBps) {
         require(_platformWallet != address(0), "QiFlow: zero address platform wallet");
         require(_defaultFeeBps <= MAX_FEE_BPS, "QiFlow: fee exceeds max");
+        owner = msg.sender;
         platformWallet = _platformWallet;
         defaultFeeBps = _defaultFeeBps;
+        _status = 1;
+        emit OwnershipTransferred(address(0), msg.sender);
     }
 
     /**
@@ -186,10 +209,10 @@ contract QiFlowPaymentRouter is Ownable, ReentrancyGuard, Pausable {
     }
 
     function pause() external onlyOwner {
-        _pause();
+        paused = true;
     }
 
     function unpause() external onlyOwner {
-        _unpause();
+        paused = false;
     }
 }
