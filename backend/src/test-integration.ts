@@ -376,6 +376,49 @@ async function runIntegrationTest() {
     const verifyData = (await verifyRes.json()) as any;
     console.log('   Verify Status:', verifyRes.status, 'Merchant ID:', verifyData.data?.merchant?.id);
     if (verifyRes.status !== 200 || !verifyData.data?.tokens?.accessToken) throw new Error('Wallet verify signature failed');
+    if (verifyData.data?.merchant?.walletAddress !== walletAddr.toLowerCase()) {
+      throw new Error('Wallet address was not normalized to lowercase');
+    }
+
+    const postVerify = (body: Record<string, unknown>) =>
+      fetch(`${baseUrl}/auth/wallet/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    // 17b: replaying the same signed challenge must be rejected (single-use)
+    const replayRes = await postVerify({ address: walletAddr, message: nonceData.data.message, signature });
+    console.log('   Replay Status:', replayRes.status);
+    if (replayRes.status !== 401) throw new Error('Replayed wallet challenge was accepted');
+
+    // 17c: a valid signature over an arbitrary message with no issued challenge must be rejected
+    const rogueMessage = 'Sign in to QiFlow with nonce: attacker-chosen';
+    const rogueSig = await testWallet.signMessage(rogueMessage);
+    const noChallengeRes = await postVerify({ address: walletAddr, message: rogueMessage, signature: rogueSig });
+    console.log('   No-challenge Status:', noChallengeRes.status);
+    if (noChallengeRes.status !== 401) throw new Error('Signature without an issued challenge was accepted');
+
+    // 17d: a tampered message (challenge issued, but different text signed) must be rejected
+    const nonce2Res = await fetch(`${baseUrl}/auth/wallet/nonce?address=${walletAddr}`);
+    const nonce2Data = (await nonce2Res.json()) as any;
+    if (nonce2Res.status !== 200 || !nonce2Data.data?.message) {
+      throw new Error(
+        `Second wallet nonce fetch failed (status ${nonce2Res.status}). ` +
+          'Note: /auth/wallet/* shares the login rate limiter — raise RATE_LIMIT_AUTH_LOGIN_MAX when running this test.',
+      );
+    }
+    const tampered = `${nonce2Data.data.message}\nExtra: line`;
+    const tamperedSig = await testWallet.signMessage(tampered);
+    const tamperedRes = await postVerify({ address: walletAddr, message: tampered, signature: tamperedSig });
+    console.log('   Tampered Status:', tamperedRes.status);
+    if (tamperedRes.status !== 401) throw new Error('Tampered wallet challenge was accepted');
+
+    // 17e: issued message is domain-bound (EIP-4361 shape)
+    if (!/^.+ wants you to sign in with your Ethereum account:\n0x/.test(nonceData.data.message)) {
+      throw new Error('Wallet challenge is not an EIP-4361 message');
+    }
+    console.log('   Wallet replay / no-challenge / tampered cases all rejected.');
 
     console.log('\n✨ ALL INTEGRATION TESTS PASSED 100% CLEANLY! ✨\n');
   } finally {
@@ -387,11 +430,19 @@ async function runIntegrationTest() {
     } catch {
       // ignore
     }
+    try {
+      const { redisClient } = await import('./lib/redis.js');
+      await redisClient.quit();
+    } catch {
+      // ignore
+    }
     server.close();
   }
 }
 
-runIntegrationTest().catch((err) => {
-  console.error('❌ Integration test failed:', err);
-  process.exit(1);
-});
+runIntegrationTest()
+  .then(() => process.exit(0))
+  .catch((err) => {
+    console.error('❌ Integration test failed:', err);
+    process.exit(1);
+  });

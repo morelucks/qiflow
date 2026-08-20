@@ -1,77 +1,116 @@
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
-import { verifyMessage } from 'ethers';
+import { verifyMessage, getAddress } from 'ethers';
 import { prisma } from '../lib/prisma.js';
 import { generateTokens, generateApiKey, verifyRefreshToken } from '../lib/auth.js';
 import type { RegisterInput, LoginInput } from '../schemas/auth.schema.js';
 import type { WalletNonceInput, WalletVerifyInput } from '../schemas/wallet-auth.schema.js';
 import { createError } from '../middleware/errorHandler.js';
 import { redisClient } from '../lib/redis.js';
+import { logger } from '../lib/logger.js';
+import { env } from '../config/env.js';
+import { DEPLOYED_CONTRACTS } from '@qiflow/shared';
 
-// In-memory fallback for nonces when Redis is unavailable or in testing
-const nonceMemoryStore = new Map<string, string>();
+// ── Wallet (SIWE-style) authentication ────────────────────────────────────────
+// Every challenge is a full EIP-4361 message bound to our domain. The server stores
+// the exact message it issued (keyed by lowercase address) and only accepts a
+// signature over that exact string, once. This prevents replay of any other
+// signed payload and phishing via generic "sign this nonce" prompts.
+
+const WALLET_NONCE_TTL_SECONDS = 300;
+const walletNonceKey = (address: string) => `wallet_nonce:${address}`;
+
+// In-memory fallback when Redis is unavailable (single-process only; logged as a warning).
+const nonceMemoryStore = new Map<string, { message: string; expiresAt: number }>();
+
+function buildSiweMessage(address: string, nonce: string, issuedAt: Date, expiresAt: Date): string {
+  const frontendUrl = new URL(env.FRONTEND_URL);
+  // EIP-4361 expects the EIP-55 checksummed address in the message body.
+  const checksummed = getAddress(address);
+  return [
+    `${frontendUrl.host} wants you to sign in with your Ethereum account:`,
+    checksummed,
+    '',
+    'Sign in to QiFlow',
+    '',
+    `URI: ${frontendUrl.origin}`,
+    'Version: 1',
+    `Chain ID: ${DEPLOYED_CONTRACTS.CYPRUS1.CHAIN_ID}`,
+    `Nonce: ${nonce}`,
+    `Issued At: ${issuedAt.toISOString()}`,
+    `Expiration Time: ${expiresAt.toISOString()}`,
+  ].join('\n');
+}
+
+async function storeIssuedMessage(address: string, message: string): Promise<void> {
+  try {
+    await redisClient.setex(walletNonceKey(address), WALLET_NONCE_TTL_SECONDS, message);
+  } catch (err) {
+    logger.warn({ err }, 'Redis unavailable — storing wallet nonce in memory');
+    nonceMemoryStore.set(address, { message, expiresAt: Date.now() + WALLET_NONCE_TTL_SECONDS * 1000 });
+  }
+}
+
+/** Atomically fetch-and-delete the issued message so each challenge is single-use. */
+async function consumeIssuedMessage(address: string): Promise<string | null> {
+  try {
+    const stored = await redisClient.getdel(walletNonceKey(address));
+    if (stored) return stored;
+  } catch (err) {
+    logger.warn({ err }, 'Redis unavailable — reading wallet nonce from memory');
+  }
+  const entry = nonceMemoryStore.get(address);
+  nonceMemoryStore.delete(address);
+  if (!entry || entry.expiresAt < Date.now()) return null;
+  return entry.message;
+}
 
 export class AuthService {
   static async getWalletNonce(input: WalletNonceInput) {
     const address = input.address.toLowerCase();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const message = `Sign in to QiFlow with nonce: ${nonce}`;
+    const issuedAt = new Date();
+    const expiresAt = new Date(issuedAt.getTime() + WALLET_NONCE_TTL_SECONDS * 1000);
+    const message = buildSiweMessage(address, nonce, issuedAt, expiresAt);
 
-    try {
-      await redisClient.setex(`wallet_nonce:${address}`, 300, nonce);
-    } catch {
-      // Redis fallback
-      nonceMemoryStore.set(address, nonce);
-      setTimeout(() => nonceMemoryStore.delete(address), 300000);
-    }
+    await storeIssuedMessage(address, message);
 
-    return { address, nonce, message };
+    return { address, nonce, message, expiresAt };
   }
 
   static async verifyWalletSignature(input: WalletVerifyInput) {
     const address = input.address.toLowerCase();
-    let recoveredAddress: string;
 
+    // 1. A challenge must have been issued for this address and must be unexpired.
+    //    Consume it first so a failed attempt cannot be retried with the same message.
+    const issuedMessage = await consumeIssuedMessage(address);
+    if (!issuedMessage) {
+      throw createError(
+        'No active sign-in challenge for this address. Request a new nonce.',
+        401,
+        'NONCE_EXPIRED',
+      );
+    }
+
+    // 2. The signed message must be exactly the one we issued.
+    if (input.message !== issuedMessage) {
+      throw createError('Signed message does not match the issued challenge.', 401, 'INVALID_NONCE');
+    }
+
+    // 3. The signature must recover to the claimed address.
+    let recoveredAddress: string;
     try {
       recoveredAddress = verifyMessage(input.message, input.signature).toLowerCase();
     } catch {
       throw createError('Invalid wallet signature.', 401, 'INVALID_SIGNATURE');
     }
-
     if (recoveredAddress !== address) {
       throw createError('Signature address does not match requested wallet address.', 401, 'INVALID_SIGNATURE');
     }
 
-    // Verify stored nonce
-    let cachedNonce: string | null = null;
-    try {
-      cachedNonce = await redisClient.get(`wallet_nonce:${address}`);
-      if (cachedNonce) {
-        await redisClient.del(`wallet_nonce:${address}`);
-      }
-    } catch {
-      // Fallback
-    }
-
-    if (!cachedNonce) {
-      cachedNonce = nonceMemoryStore.get(address) || null;
-      if (cachedNonce) {
-        nonceMemoryStore.delete(address);
-      }
-    }
-
-    if (cachedNonce && !input.message.includes(cachedNonce)) {
-      throw createError('Signature message nonce mismatch or expired.', 401, 'INVALID_NONCE');
-    }
-
-    // Find or create merchant by wallet address
-    let merchant = await prisma.merchant.findFirst({
-      where: {
-        walletAddress: {
-          equals: input.address,
-          mode: 'insensitive',
-        },
-      },
+    // Find or create merchant by (lowercased) wallet address
+    let merchant = await prisma.merchant.findUnique({
+      where: { walletAddress: address },
     });
 
     let isNewMerchant = false;
@@ -79,14 +118,15 @@ export class AuthService {
 
     if (!merchant) {
       isNewMerchant = true;
-      const businessName = input.businessName || `Wallet Merchant (${input.address.slice(0, 6)}...${input.address.slice(-4)})`;
-      
+      const businessName =
+        input.businessName || `Wallet Merchant (${address.slice(0, 6)}...${address.slice(-4)})`;
+
       merchant = await prisma.merchant.create({
         data: {
           email: null,
           passwordHash: null,
           businessName,
-          walletAddress: input.address,
+          walletAddress: address,
         },
       });
 
