@@ -7,7 +7,7 @@ const BCRYPT_SALT_ROUNDS = 12;
 
 export interface TokenPayload {
   merchantId: string;
-  email: string;
+  email: string | null;
 }
 
 export interface GeneratedApiKey {
@@ -27,7 +27,7 @@ export async function comparePassword(password: string, hash: string): Promise<b
 }
 
 // ── JWT Utilities ─────────────────────────────────────────────────────────────
-export function generateTokens(merchantId: string, email: string) {
+export function generateTokens(merchantId: string, email: string | null = null) {
   const payload: TokenPayload = { merchantId, email };
 
   const accessToken = jwt.sign(payload, env.JWT_SECRET, {
