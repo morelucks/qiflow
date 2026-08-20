@@ -117,7 +117,11 @@ export default function NewPaymentPage() {
         </div>
       )}
 
-      {!createdPayment ? (
+      {profileLoading ? (
+        <div className="flex justify-center py-12">
+          <div className="w-8 h-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : !hasWallet ? null : !createdPayment ? (
         <form
           onSubmit={handleSubmit}
           className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm space-y-4"
@@ -162,10 +166,10 @@ export default function NewPaymentPage() {
 
           <button
             type="submit"
-            disabled={loading || profileLoading || !hasWallet}
-            className="w-full bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white font-semibold py-3 rounded-xl shadow-md transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed mt-4"
+            disabled={loading}
+            className="w-full bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white font-semibold py-3 rounded-xl shadow-md transition-all text-sm disabled:opacity-50 mt-4"
           >
-            {loading ? 'Generating...' : !hasWallet && !profileLoading ? 'Set a receiving wallet first' : 'Generate Payment Session'}
+            {loading ? 'Generating...' : 'Generate Payment Session'}
           </button>
         </form>
       ) : (
