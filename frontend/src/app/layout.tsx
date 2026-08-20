@@ -7,7 +7,7 @@ export const metadata: Metadata = {
     template: '%s | QiFlow',
   },
   description:
-    'Accept Qi payments instantly. Create payment links, integrate via API, and get notified via webhooks. The simplest way to accept Qi.',
+    'Accept Qi payments instantly on Quai Network. Create payment links, integrate via REST API, and receive HMAC-signed webhooks.',
   openGraph: {
     title: 'QiFlow — Payment Gateway for Quai',
     description: 'Integrate once. Accept Qi everywhere.',
@@ -17,8 +17,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body>{children}</body>
+    <html lang="en" className="dark" suppressHydrationWarning>
+      <body className="bg-ink text-white antialiased selection:bg-mint-soft selection:text-mint">
+        {children}
+      </body>
     </html>
   );
 }

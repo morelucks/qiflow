@@ -2,57 +2,126 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
-@layer base {
-  :root {
-    --brand-ink: #13102B;
-    --brand-indigo: #1E1B4B;
-    --brand-violet: #6C4AB6;
-    --brand-mint: #00E6A8;
-    --brand-lilac: #C9BCF0;
-    --brand-offwhite: #F7F6FB;
-    --brand-white: #FFFFFF;
+:root {
+  /* Crisp & Vibrant Brand Palette */
+  --ink: #0D0A22;           /* Deep dark background */
+  --indigo: #17143A;        /* Rich dark card background */
+  --indigo-light: #252156;  /* Card hover states */
+  --violet: #7C53D9;        /* Sharp icons, borders, logo ring */
+  --violet-soft: rgba(124, 83, 217, 0.2);
+  --violet-glow: rgba(124, 83, 217, 0.5);
+  --mint: #00E6A8;          /* Vibrant mint CTAs & highlights */
+  --mint-soft: rgba(0, 230, 168, 0.15);
+  --mint-glow: rgba(0, 230, 168, 0.4);
 
-    --color-border: 250 20% 90%;
-    --color-background: 252 50% 98%; /* #F7F6FB Off-White */
-    --color-foreground: 247 45% 12%; /* #13102B Ink */
-    --color-primary: 260 52% 53%; /* #6C4AB6 Violet */
-    --color-muted: 256 30% 55%;
-    --color-destructive: 0 84.2% 60.2%;
-    --radius: 0.5rem;
-  }
+  /* High Contrast Text */
+  --text: #FFFFFF;
+  --text-secondary: #CBD5E1; /* Slate 300 - crisp, sharp readable secondary text */
+  --text-muted: #94A3B8;     /* Slate 400 - clean muted text */
 
-  .dark {
-    --color-border: 247 45% 20%;
-    --color-background: 248 48% 20%; /* #1E1B4B Primary / Deep Indigo */
-    --color-foreground: 0 0% 100%; /* #FFFFFF White headlines */
-    --color-primary: 260 52% 53%; /* #6C4AB6 Violet */
-    --color-muted: 256 60% 84%; /* #C9BCF0 Lilac muted text */
-    --color-destructive: 0 62.8% 30.6%;
-  }
+  /* Crisp Borders */
+  --border: rgba(124, 83, 217, 0.3);
+  --border-light: rgba(124, 83, 217, 0.15);
 
-  * {
-    border-color: hsl(var(--color-border));
-  }
+  /* Effects */
+  --radius: 20px;
+  --radius-sm: 14px;
+  --shadow: 0 8px 32px rgba(0,0,0,0.5);
+  --shadow-lg: 0 20px 60px rgba(0,0,0,0.7);
 
-  body {
-    @apply font-sans antialiased;
-    background-color: hsl(var(--color-background));
-    color: hsl(var(--color-foreground));
-  }
+  --color-border: 247 45% 25%;
+  --color-background: 247 45% 8%; /* #0D0A22 */
+  --color-foreground: 0 0% 100%;
+  --color-primary: 260 60% 60%;
+}
 
-  :focus-visible {
-    @apply outline-2 outline-offset-2 outline-brand-500;
-  }
+::selection {
+  background-color: var(--mint-soft);
+  color: var(--mint);
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: var(--ink);
+  color: var(--text);
+  font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+  overflow-x: hidden;
+  position: relative;
+}
+
+/* Scroll Reveal */
+.reveal {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Nav Link Underline Animation */
+.nav-link {
+  position: relative;
+}
+
+.nav-link::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--mint);
+  border-radius: 2px;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s ease;
+}
+
+.nav-link:hover::after {
+  transform: scaleX(1);
+}
+
+/* Floating Orbs Animation */
+@keyframes drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -20px) scale(1.05); }
+  66% { transform: translate(-20px, 15px) scale(0.95); }
+}
+
+.animate-drift {
+  animation: drift 22s ease-in-out infinite;
+}
+
+.animate-drift-reverse {
+  animation: drift 26s ease-in-out infinite reverse;
+}
+
+/* Badge Pulse Glow */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; box-shadow: 0 0 14px var(--mint-glow); }
+  50% { opacity: 0.6; box-shadow: 0 0 4px var(--mint-glow); }
+}
+
+.pulse-dot {
+  animation: pulse-glow 2.5s ease-in-out infinite;
 }
 
 @layer components {
-  .badge-created    { @apply bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300; }
-  .badge-pending    { @apply bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400; }
-  .badge-processing { @apply bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400; }
-  .badge-completed  { @apply bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400; }
-  .badge-failed     { @apply bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400; }
-  .badge-cancelled  { @apply bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400; }
-  .badge-expired    { @apply bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400; }
+  .badge-created    { @apply bg-gray-800 text-gray-200 border border-gray-700; }
+  .badge-pending    { @apply bg-yellow-900/40 text-yellow-300 border border-yellow-700/50; }
+  .badge-processing { @apply bg-blue-900/40 text-blue-300 border border-blue-700/50; }
+  .badge-completed  { @apply bg-emerald-900/40 text-emerald-300 border border-emerald-700/50; }
+  .badge-failed     { @apply bg-red-900/40 text-red-300 border border-red-700/50; }
+  .badge-cancelled  { @apply bg-gray-800 text-gray-300 border border-gray-700; }
+  .badge-expired    { @apply bg-orange-900/40 text-orange-300 border border-orange-700/50; }
 }
