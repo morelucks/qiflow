@@ -26,8 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body className="bg-ink text-[#F0F0F5] antialiased selection:bg-mint-soft selection:text-mint">
-        <div className="noise-overlay" aria-hidden="true" />
+      <body className="bg-ink text-white antialiased selection:bg-mint-soft selection:text-mint">
         {children}
       </body>
     </html>
