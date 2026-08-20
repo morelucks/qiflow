@@ -24,6 +24,15 @@ export class MerchantsController {
     }
   }
 
+  static async getStats(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await MerchantsService.getDashboardStats(req.merchant!.id);
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   static async listApiKeys(req: Request, res: Response, next: NextFunction) {
     try {
       const data = await MerchantsService.listApiKeys(req.merchant!.id);

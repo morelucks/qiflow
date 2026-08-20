@@ -94,3 +94,17 @@ export interface WebhookTestResult {
   error: string | null;
   sentAt: string;
 }
+
+export interface DashboardTotals {
+  currency: string;
+  amount: string;
+  count: number;
+}
+
+export interface DashboardStats {
+  received: DashboardTotals[];
+  receivedToday: DashboardTotals[];
+  payments: { total: number; byStatus: Record<string, number> };
+  recent: Payment[];
+  setup: { walletSet: boolean; hasApiKey: boolean; hasWebhook: boolean; hasPayment: boolean };
+}

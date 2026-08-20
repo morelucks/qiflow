@@ -10,6 +10,10 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./address": {
+      "import": "./dist/utils/address.js",
+      "types": "./dist/utils/address.d.ts"
     }
   },
   "scripts": {

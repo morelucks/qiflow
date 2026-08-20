@@ -51,6 +51,9 @@ export default function Navbar() {
           <Link href="#trust-bar" className="nav-link hover:text-white transition-colors">
             Network Stats
           </Link>
+          <Link href="/docs" className="nav-link hover:text-white transition-colors">
+            Docs
+          </Link>
           <Link href="/auth/login" className="nav-link hover:text-white transition-colors">
             Log in
           </Link>

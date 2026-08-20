@@ -9,6 +9,7 @@ router.use(requireAuth);
 
 router.get('/me', MerchantsController.getProfile);
 router.put('/me', MerchantsController.updateProfile);
+router.get('/me/stats', MerchantsController.getStats);
 router.get('/me/api-keys', MerchantsController.listApiKeys);
 router.post('/me/api-keys', MerchantsController.createApiKey);
 router.delete('/me/api-keys/:id', MerchantsController.revokeApiKey);
