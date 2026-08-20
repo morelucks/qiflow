@@ -350,7 +350,32 @@ async function runIntegrationTest() {
     if (WEBHOOK_RETRY_DELAYS_MS[2] !== 300_000) throw new Error('Retry 3 delay mismatch');
     if (WEBHOOK_RETRY_DELAYS_MS[3] !== 1_800_000) throw new Error('Retry 4 delay mismatch');
     if (WEBHOOK_RETRY_DELAYS_MS[4] !== 7_200_000) throw new Error('Retry 5 delay mismatch');
-    console.log('   All retry delays verified.');
+    // Test 17: Wallet Authentication (Nonce & SIWE Verification)
+    console.log('\n1️⃣7️⃣ Testing Wallet Authentication (GET /auth/wallet/nonce & POST /auth/wallet/verify) ...');
+    const { Wallet } = await import('ethers');
+    const testWallet = Wallet.createRandom();
+    const walletAddr = testWallet.address;
+
+    const nonceRes = await fetch(`${baseUrl}/auth/wallet/nonce?address=${walletAddr}`);
+    const nonceData = (await nonceRes.json()) as any;
+    console.log('   Nonce Status:', nonceRes.status, 'Message:', nonceData.data?.message);
+    if (nonceRes.status !== 200 || !nonceData.data?.message) throw new Error('Wallet nonce fetch failed');
+
+    const signature = await testWallet.signMessage(nonceData.data.message);
+
+    const verifyRes = await fetch(`${baseUrl}/auth/wallet/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        address: walletAddr,
+        message: nonceData.data.message,
+        signature,
+        businessName: 'Test Web3 Merchant',
+      }),
+    });
+    const verifyData = (await verifyRes.json()) as any;
+    console.log('   Verify Status:', verifyRes.status, 'Merchant ID:', verifyData.data?.merchant?.id);
+    if (verifyRes.status !== 200 || !verifyData.data?.tokens?.accessToken) throw new Error('Wallet verify signature failed');
 
     console.log('\n✨ ALL INTEGRATION TESTS PASSED 100% CLEANLY! ✨\n');
   } finally {

@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/api-client';
 
+import { WalletLoginButton } from '@/components/auth/WalletLoginButton';
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -63,6 +65,19 @@ export default function LoginPage() {
             {error}
           </div>
         )}
+
+        <WalletLoginButton className="mb-5" />
+
+        <div className="relative my-6">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-gray-200 dark:border-gray-800" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-gray-50 dark:bg-gray-950 px-2 text-gray-500 dark:text-gray-400">
+              Or continue with email
+            </span>
+          </div>
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

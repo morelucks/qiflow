@@ -1,8 +1,29 @@
 import type { Request, Response, NextFunction } from 'express';
 import { AuthService } from '../services/auth.service.js';
 import { registerSchema, loginSchema, refreshTokenSchema } from '../schemas/auth.schema.js';
+import { walletNonceSchema, walletVerifySchema } from '../schemas/wallet-auth.schema.js';
 
 export class AuthController {
+  static async getWalletNonce(req: Request, res: Response, next: NextFunction) {
+    try {
+      const input = walletNonceSchema.parse(req.query.address ? { address: req.query.address } : req.body);
+      const result = await AuthService.getWalletNonce(input);
+      res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async verifyWallet(req: Request, res: Response, next: NextFunction) {
+    try {
+      const input = walletVerifySchema.parse(req.body);
+      const result = await AuthService.verifyWalletSignature(input);
+      res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   static async register(req: Request, res: Response, next: NextFunction) {
     try {
       const input = registerSchema.parse(req.body);

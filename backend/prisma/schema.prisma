@@ -29,10 +29,10 @@ enum WebhookDeliveryStatus {
 
 model Merchant {
   id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email         String   @unique
-  passwordHash  String   @map("password_hash")
+  email         String?  @unique
+  passwordHash  String?  @map("password_hash")
   businessName  String   @map("business_name")
-  walletAddress String?  @map("wallet_address")
+  walletAddress String?  @unique @map("wallet_address")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
