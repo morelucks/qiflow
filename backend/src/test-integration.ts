@@ -568,6 +568,16 @@ async function runIntegrationTest() {
     if (setWalletRes.status !== 200 || setWalletData.data?.walletAddress !== `0x00ffeeddccbbaa998877665544332211${runHex.slice(-8)}`)
       throw new Error('Wallet address was not saved / normalized');
 
+    const mismatchPay = await fetch(`${baseUrl}/v1/payments`, {
+      method: 'POST',
+      headers: auth2H,
+      body: JSON.stringify({ amount: 1, currency: 'QUAI' }),
+    });
+    const mismatchData = (await mismatchPay.json()) as any;
+    console.log('   QUAI payment to Qi wallet Status:', mismatchPay.status, mismatchData.error?.code);
+    if (mismatchPay.status !== 400 || mismatchData.error?.code !== 'WALLET_LEDGER_MISMATCH')
+      throw new Error('QUAI payment to a Qi address was not blocked');
+
     const withWalletPay = await fetch(`${baseUrl}/v1/payments`, {
       method: 'POST',
       headers: auth2H,

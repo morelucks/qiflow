@@ -6,6 +6,21 @@ import type { MerchantContext } from '../types/index.js';
 import { createError } from '../middleware/errorHandler.js';
 import { verifyPaymentOnChain } from './payment-verifier.js';
 import { logger } from '../lib/logger.js';
+import { addressLedger } from '@qiflow/shared';
+
+/** A wallet can only receive the currency of its own ledger (Qi vs Quai address). */
+export function assertWalletMatchesCurrency(walletAddress: string, currency: string) {
+  const ledger = addressLedger(walletAddress);
+  if (ledger && ledger !== currency.toUpperCase()) {
+    const other = ledger === 'QI' ? 'QUAI' : 'QI';
+    throw createError(
+      `Your receiving wallet is a ${ledger} address and cannot receive ${other}. ` +
+        `Choose ${ledger} for this payment, or set a ${other} receiving address in Settings.`,
+      400,
+      'WALLET_LEDGER_MISMATCH',
+    );
+  }
+}
 
 export type { MerchantContext };
 
@@ -80,6 +95,7 @@ export class PaymentsService {
         'WALLET_NOT_SET',
       );
     }
+    assertWalletMatchesCurrency(merchant.walletAddress, input.currency);
     const receivingAddress = merchant.walletAddress;
 
     const payment = await prisma.payment.create({

@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { prisma } from '../lib/prisma.js';
 import type { CreatePaymentLinkInput, UpdatePaymentLinkInput } from '../schemas/payment-links.schema.js';
 import { createError } from '../middleware/errorHandler.js';
+import { assertWalletMatchesCurrency } from './payments.service.js';
 
 function generateLinkCode(): string {
   return `pl_${crypto.randomBytes(4).toString('hex')}`;
@@ -99,6 +100,8 @@ export class PaymentLinksService {
         'WALLET_NOT_SET',
       );
     }
+
+    assertWalletMatchesCurrency(link.merchant.walletAddress, link.currency || 'QI');
 
     const paymentCode = generatePaymentCode();
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000);

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { MerchantProfile, Payment } from '../../../../types';
 import { apiClient } from '../../../../lib/api-client';
+import { addressLedger } from '@qiflow/shared';
 
 export default function NewPaymentPage() {
   const [profile, setProfile] = useState<MerchantProfile | null>(null);
@@ -29,6 +30,12 @@ export default function NewPaymentPage() {
   }, []);
 
   const hasWallet = Boolean(profile?.walletAddress);
+  const walletLedger = profile?.walletAddress ? addressLedger(profile.walletAddress) : null;
+
+  // A wallet can only receive its own ledger's currency — lock the selector to it
+  useEffect(() => {
+    if (walletLedger) setCurrency(walletLedger);
+  }, [walletLedger]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -143,12 +150,19 @@ export default function NewPaymentPage() {
               <select
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
-                className="px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-brand-500"
+                disabled={Boolean(walletLedger)}
+                className="px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-70"
               >
                 <option value="QI">QI</option>
                 <option value="QUAI">QUAI</option>
               </select>
             </div>
+            {walletLedger && (
+              <p className="text-[11px] text-gray-500 mt-1">
+                Your receiving wallet is a {walletLedger} address, so payments are in {walletLedger}. Change it in Settings to accept{' '}
+                {walletLedger === 'QI' ? 'QUAI' : 'QI'}.
+              </p>
+            )}
           </div>
 
           <div>

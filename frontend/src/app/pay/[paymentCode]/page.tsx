@@ -6,7 +6,7 @@ import type { Payment } from '../../../types';
 import { Button } from '../../../components/ui/Button';
 import { apiClient } from '../../../lib/api-client';
 import { formatAmount, truncateAddress } from '../../../lib/formatters';
-import { payWithPelagus } from '../../../lib/pelagus';
+import { payQuaiWithPelagus } from '../../../lib/pelagus';
 
 export default function SingleCheckoutPage({ params }: { params: { paymentCode: string } }) {
   const { paymentCode } = params;
@@ -63,10 +63,9 @@ export default function SingleCheckoutPage({ params }: { params: { paymentCode: 
     setPayError(null);
     try {
       setPaying(true);
-      const { txHash, from } = await payWithPelagus({
+      const { txHash, from } = await payQuaiWithPelagus({
         to: payment.receivingAddress,
         amount: payment.amount,
-        currency: payment.currency,
       });
       await submitTxHash(txHash, from);
     } catch (err) {
@@ -124,6 +123,7 @@ export default function SingleCheckoutPage({ params }: { params: { paymentCode: 
   }
 
   const isCompleted = payment.status === 'COMPLETED';
+  const isQi = payment.currency.toUpperCase() === 'QI';
   const isProcessing = payment.status === 'PROCESSING';
   const isClosed = payment.status === 'EXPIRED' || payment.status === 'FAILED' || payment.status === 'CANCELLED';
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
@@ -204,28 +204,44 @@ export default function SingleCheckoutPage({ params }: { params: { paymentCode: 
               </div>
             ) : (
               <>
-                {/* Pay Button */}
-                <Button
-                  onClick={handleWalletPay}
-                  loading={paying}
-                  variant="primary"
-                  size="lg"
-                  className="w-full !rounded-2xl"
-                >
-                  Pay {formatAmount(payment.amount, payment.currency)} with Pelagus
-                </Button>
+                {isQi ? (
+                  /* Qi is UTXO-based; Pelagus exposes no dApp API for Qi sends — pay from the wallet UI */
+                  <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 p-4 text-left space-y-2">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">How to pay with Qi</p>
+                    <ol className="text-xs text-gray-600 dark:text-gray-300 list-decimal list-inside space-y-1">
+                      <li>Open Pelagus and switch to your <span className="font-semibold">Qi</span> account.</li>
+                      <li>
+                        Send exactly <span className="font-semibold">{formatAmount(payment.amount, payment.currency)}</span>{' '}
+                        to the deposit address above (scan the QR or tap Copy).
+                      </li>
+                      <li>Paste the transaction hash below so we can confirm it on-chain.</li>
+                    </ol>
+                  </div>
+                ) : (
+                  <>
+                    {/* Pay Button (QUAI — account-based, can be sent from a dApp) */}
+                    <Button
+                      onClick={handleWalletPay}
+                      loading={paying}
+                      variant="primary"
+                      size="lg"
+                      className="w-full !rounded-2xl"
+                    >
+                      Pay {formatAmount(payment.amount, payment.currency)} with Pelagus
+                    </Button>
+                    <div className="text-center">
+                      <button
+                        type="button"
+                        onClick={() => setShowManual((v) => !v)}
+                        className="text-xs text-gray-500 hover:text-gray-900 dark:hover:text-white underline underline-offset-2"
+                      >
+                        {showManual ? 'Hide manual confirmation' : 'Paid from another wallet? Enter your transaction hash'}
+                      </button>
+                    </div>
+                  </>
+                )}
 
-                {/* Manual fallback for other wallets / QR payers */}
-                <div className="text-center">
-                  <button
-                    type="button"
-                    onClick={() => setShowManual((v) => !v)}
-                    className="text-xs text-gray-500 hover:text-gray-900 dark:hover:text-white underline underline-offset-2"
-                  >
-                    {showManual ? 'Hide manual confirmation' : 'Paid from another wallet? Enter your transaction hash'}
-                  </button>
-                </div>
-                {showManual && (
+                {(isQi || showManual) && (
                   <form onSubmit={handleManualSubmit} className="flex gap-2">
                     <input
                       type="text"
@@ -235,8 +251,8 @@ export default function SingleCheckoutPage({ params }: { params: { paymentCode: 
                       spellCheck={false}
                       className="flex-1 px-3 py-2 text-xs font-mono bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                     />
-                    <Button type="submit" variant="secondary" size="sm" loading={paying}>
-                      Verify
+                    <Button type="submit" variant={isQi ? 'primary' : 'secondary'} size="sm" loading={paying}>
+                      {isQi ? 'I have paid — verify' : 'Verify'}
                     </Button>
                   </form>
                 )}
