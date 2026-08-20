@@ -1,12 +1,23 @@
 import type { Request, Response, NextFunction } from 'express';
 import { PaymentsService } from '../services/payments.service.js';
-import { createPaymentSchema, simulatePaymentSchema } from '../schemas/payments.schema.js';
+import { createPaymentSchema, simulatePaymentSchema, submitTransactionSchema } from '../schemas/payments.schema.js';
 
 export class PaymentsController {
   static async getPublicPayment(req: Request, res: Response, next: NextFunction) {
     try {
       const code = req.params.code as string;
       const data = await PaymentsService.getPublicPayment(code);
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async submitTransaction(req: Request, res: Response, next: NextFunction) {
+    try {
+      const code = req.params.code as string;
+      const input = submitTransactionSchema.parse(req.body);
+      const data = await PaymentsService.submitTransaction(code, input);
       res.json({ success: true, data });
     } catch (err) {
       next(err);

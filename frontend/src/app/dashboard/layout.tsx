@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { AuthGuard } from '@/components/auth/AuthGuard';
+import { LogoutButton } from '@/components/auth/LogoutButton';
 
 export const metadata: Metadata = { title: 'Dashboard' };
 
@@ -45,12 +47,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           >
             + Create Payment
           </Link>
+          <div className="mt-2">
+            <LogoutButton />
+          </div>
         </div>
       </aside>
 
       {/* Main content */}
       <main className="flex-1 overflow-auto">
-        <div className="max-w-6xl mx-auto px-8 py-8">{children}</div>
+        <div className="max-w-6xl mx-auto px-8 py-8">
+          <AuthGuard>{children}</AuthGuard>
+        </div>
       </main>
     </div>
   );

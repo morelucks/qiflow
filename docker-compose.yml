@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -10,7 +8,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
     ports:
-      - '5433:5432'
+      - '${POSTGRES_PORT:-5433}:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -24,14 +22,17 @@ services:
     container_name: qiflow_redis
     restart: always
     ports:
-      - '6379:6379'
+      - '${REDIS_PORT:-6379}:6379'
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 5s
       retries: 5
 
+  # App images are opt-in: `docker compose --profile app up -d --build`.
+  # Day-to-day dev runs the apps on the host (`npm run dev`) against this infra.
   backend:
+    profiles: ['app']
     build:
       context: .
       dockerfile: Dockerfile
@@ -47,6 +48,8 @@ services:
       REDIS_URL: redis://redis:6379
       JWT_SECRET: dev_jwt_secret_key_change_in_production
       JWT_REFRESH_SECRET: dev_jwt_refresh_secret_key_change_in_production
+      # 32-byte hex key for webhook HMAC signing — dev placeholder, change in production
+      WEBHOOK_SECRET_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
       FRONTEND_URL: http://localhost:3000
     depends_on:
       postgres:
@@ -55,10 +58,13 @@ services:
         condition: service_healthy
 
   frontend:
+    profiles: ['app']
     build:
       context: .
       dockerfile: Dockerfile
       target: frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:4000
     container_name: qiflow_frontend
     restart: always
     ports:

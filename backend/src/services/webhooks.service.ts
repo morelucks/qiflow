@@ -1,4 +1,5 @@
 import { encryptWebhookSecret } from '../lib/webhook-crypto.js';
+import { sendSignedWebhook } from '../lib/webhook-delivery.js';
 import crypto from 'crypto';
 import { prisma } from '../lib/prisma.js';
 import type { CreateWebhookInput } from '../schemas/webhooks.schema.js';
@@ -132,32 +133,14 @@ export class WebhooksService {
       throw createError('Webhook delivery log not found', 404, 'NOT_FOUND');
     }
 
-    const payloadString = JSON.stringify(delivery.payload);
-    const signature = crypto.createHmac('sha256', delivery.webhook.secret).update(payloadString).digest('hex');
-
-    let statusCode = 200;
-    let responseBody = JSON.stringify({ message: 'Simulated delivery success' });
-    let status: 'DELIVERED' | 'FAILED' = 'DELIVERED';
-
-    try {
-      const response = await fetch(delivery.webhook.url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-QiFlow-Signature': signature,
-          'X-QiFlow-Event': delivery.event,
-        },
-        body: payloadString,
-        signal: AbortSignal.timeout(5000),
-      });
-      statusCode = response.status;
-      responseBody = await response.text();
-      status = response.ok ? 'DELIVERED' : 'FAILED';
-    } catch (fetchErr: unknown) {
-      status = 'FAILED';
-      statusCode = 500;
-      responseBody = fetchErr instanceof Error ? fetchErr.message : 'Fetch failed';
-    }
+    const result = await sendSignedWebhook(
+      delivery.webhook,
+      delivery.event,
+      delivery.payload as Record<string, unknown>,
+    );
+    const status: 'DELIVERED' | 'FAILED' = result.ok ? 'DELIVERED' : 'FAILED';
+    const statusCode = result.statusCode ?? 0;
+    const responseBody = result.responseBody ?? '';
 
     const updated = await prisma.webhookDelivery.update({
       where: { id: delivery.id },
@@ -166,7 +149,7 @@ export class WebhooksService {
         status,
         statusCode,
         responseBody: responseBody.slice(0, 1000),
-        deliveredAt: new Date(),
+        deliveredAt: result.ok ? result.sentAt : null,
       },
     });
 
@@ -176,6 +159,46 @@ export class WebhooksService {
       statusCode: updated.statusCode,
       attempt: updated.attempt,
       deliveredAt: updated.deliveredAt,
+    };
+  }
+
+  /**
+   * Send a signed `webhook.test` event to the endpoint right now and report the result.
+   * Lets merchants confirm reachability and signature verification before going live.
+   */
+  static async testWebhook(merchantId: string, id: string) {
+    const webhook = await prisma.webhook.findFirst({ where: { id, merchantId } });
+    if (!webhook) {
+      throw createError('Webhook endpoint not found', 404, 'NOT_FOUND');
+    }
+
+    const payload = {
+      event: 'webhook.test',
+      test: true,
+      webhookId: webhook.id,
+      sentAt: new Date().toISOString(),
+      payment: {
+        id: '00000000-0000-0000-0000-000000000000',
+        paymentCode: 'pay_test_000000000000',
+        amount: '1.00000000',
+        currency: 'QI',
+        status: 'COMPLETED',
+        txHash: `0x${'0'.repeat(64)}`,
+      },
+    };
+
+    const result = await sendSignedWebhook(webhook, 'webhook.test', payload);
+
+    return {
+      webhookId: webhook.id,
+      url: webhook.url,
+      event: 'webhook.test',
+      ok: result.ok,
+      statusCode: result.statusCode,
+      durationMs: result.durationMs,
+      responseBody: result.responseBody,
+      error: result.error,
+      sentAt: result.sentAt,
     };
   }
 }

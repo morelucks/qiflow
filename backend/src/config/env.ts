@@ -13,8 +13,11 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(32),
 
   // Quai Network
-  QUAI_RPC_URL: z.string().url().default('https://rpc.sandbox.quai.network'),
+  // Cyprus-1 (Orchard testnet) by default — matches the deployed contracts in @qiflow/shared
+  QUAI_RPC_URL: z.string().url().default('https://orchard.rpc.quai.network/cyprus1'),
   QUAI_NETWORK: z.enum(['testnet', 'mainnet']).default('testnet'),
+  // Block confirmations required before a submitted payment tx is marked COMPLETED
+  CONFIRMATION_THRESHOLD: z.coerce.number().int().min(0).default(1),
 
   // Redis (optional at scaffold stage)
   REDIS_URL: z.string().default('redis://localhost:6379'),

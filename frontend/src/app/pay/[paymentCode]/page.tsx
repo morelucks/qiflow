@@ -6,6 +6,7 @@ import type { Payment } from '../../../types';
 import { Button } from '../../../components/ui/Button';
 import { apiClient } from '../../../lib/api-client';
 import { formatAmount, truncateAddress } from '../../../lib/formatters';
+import { payQuaiWithPelagus } from '../../../lib/pelagus';
 
 export default function SingleCheckoutPage({ params }: { params: { paymentCode: string } }) {
   const { paymentCode } = params;
@@ -14,6 +15,9 @@ export default function SingleCheckoutPage({ params }: { params: { paymentCode: 
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [paying, setPaying] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
+  const [manualHash, setManualHash] = useState('');
+  const [showManual, setShowManual] = useState(false);
 
   const fetchPayment = useCallback(async () => {
     try {
@@ -43,17 +47,49 @@ export default function SingleCheckoutPage({ params }: { params: { paymentCode: 
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const submitTxHash = async (txHash: string, payerAddress?: string) => {
+    const res = await apiClient<Payment>(`/v1/payments/public/code/${paymentCode}/tx`, {
+      method: 'POST',
+      body: JSON.stringify({ txHash, ...(payerAddress ? { payerAddress } : {}) }),
+    });
+    if (!res.success) {
+      throw new Error(res.error?.message || 'Could not submit transaction for verification.');
+    }
+    await fetchPayment();
+  };
+
   const handleWalletPay = async () => {
     if (!payment) return;
+    setPayError(null);
     try {
       setPaying(true);
-      await apiClient(`/v1/payments/${payment.id}/simulate`, {
-        method: 'POST',
-        body: JSON.stringify({ status: 'COMPLETED' }),
+      const { txHash, from } = await payQuaiWithPelagus({
+        to: payment.receivingAddress,
+        amount: payment.amount,
       });
-      await fetchPayment();
-    } catch {
-      alert('Wallet payment error');
+      await submitTxHash(txHash, from);
+    } catch (err) {
+      setPayError(err instanceof Error ? err.message : 'Wallet payment failed.');
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  const handleManualSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!payment) return;
+    setPayError(null);
+    const hash = manualHash.trim();
+    if (!/^0x[0-9a-fA-F]{64}$/.test(hash)) {
+      setPayError('Enter the 0x-prefixed 64-character transaction hash from your wallet.');
+      return;
+    }
+    try {
+      setPaying(true);
+      await submitTxHash(hash);
+      setManualHash('');
+    } catch (err) {
+      setPayError(err instanceof Error ? err.message : 'Could not submit transaction.');
     } finally {
       setPaying(false);
     }
@@ -87,6 +123,9 @@ export default function SingleCheckoutPage({ params }: { params: { paymentCode: 
   }
 
   const isCompleted = payment.status === 'COMPLETED';
+  const isQi = payment.currency.toUpperCase() === 'QI';
+  const isProcessing = payment.status === 'PROCESSING';
+  const isClosed = payment.status === 'EXPIRED' || payment.status === 'FAILED' || payment.status === 'CANCELLED';
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
     payment.receivingAddress
   )}`;
@@ -144,24 +183,94 @@ export default function SingleCheckoutPage({ params }: { params: { paymentCode: 
               </div>
             </div>
 
-            {/* Pay Button */}
-            <Button
-              onClick={handleWalletPay}
-              loading={paying}
-              variant="primary"
-              size="lg"
-              className="w-full !rounded-2xl"
-            >
-              Pay with Pelagus Wallet
-            </Button>
+            {isProcessing ? (
+              <div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 p-4 text-center space-y-1">
+                <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Transaction submitted</p>
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  Waiting for confirmation on Quai Network. This page updates automatically.
+                </p>
+                {payment.txHash && (
+                  <p className="font-mono text-[11px] text-amber-700 dark:text-amber-400 truncate">
+                    {payment.txHash}
+                  </p>
+                )}
+              </div>
+            ) : isClosed ? (
+              <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 p-4 text-center">
+                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                  This payment is {payment.status.toLowerCase()}.
+                </p>
+                <p className="text-xs text-gray-500 mt-1">Ask the merchant for a new payment link.</p>
+              </div>
+            ) : (
+              <>
+                {isQi ? (
+                  /* Qi is UTXO-based; Pelagus exposes no dApp API for Qi sends — pay from the wallet UI */
+                  <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 p-4 text-left space-y-2">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">How to pay with Qi</p>
+                    <ol className="text-xs text-gray-600 dark:text-gray-300 list-decimal list-inside space-y-1">
+                      <li>Open Pelagus and switch to your <span className="font-semibold">Qi</span> account.</li>
+                      <li>
+                        Send exactly <span className="font-semibold">{formatAmount(payment.amount, payment.currency)}</span>{' '}
+                        to the deposit address above (scan the QR or tap Copy).
+                      </li>
+                      <li>Paste the transaction hash below so we can confirm it on-chain.</li>
+                    </ol>
+                  </div>
+                ) : (
+                  <>
+                    {/* Pay Button (QUAI — account-based, can be sent from a dApp) */}
+                    <Button
+                      onClick={handleWalletPay}
+                      loading={paying}
+                      variant="primary"
+                      size="lg"
+                      className="w-full !rounded-2xl"
+                    >
+                      Pay {formatAmount(payment.amount, payment.currency)} with Pelagus
+                    </Button>
+                    <div className="text-center">
+                      <button
+                        type="button"
+                        onClick={() => setShowManual((v) => !v)}
+                        className="text-xs text-gray-500 hover:text-gray-900 dark:hover:text-white underline underline-offset-2"
+                      >
+                        {showManual ? 'Hide manual confirmation' : 'Paid from another wallet? Enter your transaction hash'}
+                      </button>
+                    </div>
+                  </>
+                )}
 
-            {/* Status Poller Indicator */}
-            <div className="text-center">
-              <span className="inline-flex items-center gap-2 text-xs text-gray-500 font-medium">
-                <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
-                Awaiting transaction on Quai Network...
-              </span>
-            </div>
+                {(isQi || showManual) && (
+                  <form onSubmit={handleManualSubmit} className="flex gap-2">
+                    <input
+                      type="text"
+                      value={manualHash}
+                      onChange={(e) => setManualHash(e.target.value)}
+                      placeholder="0x… transaction hash"
+                      spellCheck={false}
+                      className="flex-1 px-3 py-2 text-xs font-mono bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    />
+                    <Button type="submit" variant={isQi ? 'primary' : 'secondary'} size="sm" loading={paying}>
+                      {isQi ? 'I have paid — verify' : 'Verify'}
+                    </Button>
+                  </form>
+                )}
+              </>
+            )}
+
+            {payError && (
+              <p className="text-xs text-center text-rose-600 dark:text-rose-400">{payError}</p>
+            )}
+
+            {!isClosed && (
+              <div className="text-center">
+                <span className="inline-flex items-center gap-2 text-xs text-gray-500 font-medium">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                  {isProcessing ? 'Confirming on Quai Network...' : 'Awaiting transaction on Quai Network...'}
+                </span>
+              </div>
+            )}
           </>
         ) : (
           /* Receipt State */

@@ -28,6 +28,10 @@ async function runIntegrationTest() {
     // Test 2: Register merchant
     console.log('\n2️⃣ Testing POST /auth/register ...');
     const testEmail = `merchant_${Date.now()}@example.com`;
+    // Unique per run (DB persists between runs); mixed case to prove normalization
+    const runHex = Date.now().toString(16).padStart(12, '0');
+    const testWalletMixed = `0x00A1b2C3d4E5f60718293A4b5C6d7E${runHex.slice(-10).toUpperCase()}`;
+    const testWalletLower = testWalletMixed.toLowerCase();
     const regRes = await fetch(`${baseUrl}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -35,6 +39,7 @@ async function runIntegrationTest() {
         email: testEmail,
         password: 'Password123!',
         businessName: 'Acme Qi Store',
+        walletAddress: testWalletMixed,
       }),
     });
     const regData = (await regRes.json()) as any;
@@ -108,6 +113,34 @@ async function runIntegrationTest() {
     const publicPayData = (await publicPayRes.json()) as any;
     console.log('   Status:', publicPayRes.status, 'Merchant:', publicPayData.data?.merchantName);
     if (publicPayRes.status !== 200) throw new Error('Public payment lookup failed');
+    if (publicPayData.data?.receivingAddress !== testWalletLower)
+      throw new Error('Public payment does not carry the merchant receiving wallet (lowercased)');
+
+    // Test 6b: Payer submits a tx hash for on-chain verification (public)
+    console.log('\n6️⃣b Testing POST /v1/payments/public/code/:code/tx ...');
+    const fakeTxHash = `0x${'ab'.repeat(32)}`;
+    const badTxRes = await fetch(`${baseUrl}/v1/payments/public/code/${paymentCode}/tx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ txHash: 'not-a-hash' }),
+    });
+    console.log('   Invalid hash Status:', badTxRes.status);
+    if (badTxRes.status !== 400) throw new Error('Invalid tx hash was accepted');
+    const txRes = await fetch(`${baseUrl}/v1/payments/public/code/${paymentCode}/tx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ txHash: fakeTxHash }),
+    });
+    const txData = (await txRes.json()) as any;
+    console.log('   Status:', txRes.status, 'Payment status:', txData.data?.status);
+    if (txRes.status !== 200 || txData.data?.status !== 'PROCESSING') throw new Error('Tx submission failed');
+    const otherTxRes = await fetch(`${baseUrl}/v1/payments/public/code/${paymentCode}/tx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ txHash: `0x${'cd'.repeat(32)}` }),
+    });
+    console.log('   Second different hash Status:', otherTxRes.status);
+    if (otherTxRes.status !== 409) throw new Error('A second conflicting tx hash was accepted');
 
     // Test 7: Simulate Payment Completion & Trigger Webhooks
     console.log('\n7️⃣ Testing POST /v1/payments/:id/simulate ...');
@@ -315,6 +348,28 @@ async function runIntegrationTest() {
       console.log('   Is Old Timestamp Valid (should be false):', isOldTsValid);
       if (isOldTsValid) throw new Error('Old timestamp check passed when it should fail');
 
+      // Test 14b: "Send test event" to the endpoint (synchronous, signed)
+      console.log('   Testing POST /v1/webhooks/:id/test ...');
+      receivedRequest = null;
+      const testRes = await fetch(`${baseUrl}/v1/webhooks/${webhookId}/test`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const testData = (await testRes.json()) as any;
+      console.log('   Test Status:', testRes.status, 'ok:', testData.data?.ok, 'HTTP', testData.data?.statusCode);
+      if (testRes.status !== 200 || testData.data?.ok !== true || testData.data?.statusCode !== 200)
+        throw new Error('Webhook test event was not delivered');
+      if (!receivedRequest) throw new Error('Mock receiver did not receive the test event');
+      const testBody = JSON.parse((receivedRequest as any).body);
+      if (testBody.event !== 'webhook.test') throw new Error('Test event payload has wrong event name');
+      const testSigOk = verifyWebhookSignature(
+        Buffer.from((receivedRequest as any).body),
+        webhookSecret,
+        (receivedRequest as any).headers['x-qiflow-signature'] as string,
+      );
+      console.log('   Test event signature valid:', testSigOk);
+      if (!testSigOk) throw new Error('Test event signature did not verify');
+
       const deliveryRecord = await prisma.webhookDelivery.findFirst({
         where: { webhookId },
         orderBy: { createdAt: 'desc' },
@@ -376,6 +431,177 @@ async function runIntegrationTest() {
     const verifyData = (await verifyRes.json()) as any;
     console.log('   Verify Status:', verifyRes.status, 'Merchant ID:', verifyData.data?.merchant?.id);
     if (verifyRes.status !== 200 || !verifyData.data?.tokens?.accessToken) throw new Error('Wallet verify signature failed');
+    if (verifyData.data?.merchant?.walletAddress !== walletAddr.toLowerCase()) {
+      throw new Error('Wallet address was not normalized to lowercase');
+    }
+
+    const postVerify = (body: Record<string, unknown>) =>
+      fetch(`${baseUrl}/auth/wallet/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    // 17b: replaying the same signed challenge must be rejected (single-use)
+    const replayRes = await postVerify({ address: walletAddr, message: nonceData.data.message, signature });
+    console.log('   Replay Status:', replayRes.status);
+    if (replayRes.status !== 401) throw new Error('Replayed wallet challenge was accepted');
+
+    // 17c: a valid signature over an arbitrary message with no issued challenge must be rejected
+    const rogueMessage = 'Sign in to QiFlow with nonce: attacker-chosen';
+    const rogueSig = await testWallet.signMessage(rogueMessage);
+    const noChallengeRes = await postVerify({ address: walletAddr, message: rogueMessage, signature: rogueSig });
+    console.log('   No-challenge Status:', noChallengeRes.status);
+    if (noChallengeRes.status !== 401) throw new Error('Signature without an issued challenge was accepted');
+
+    // 17d: a tampered message (challenge issued, but different text signed) must be rejected
+    const nonce2Res = await fetch(`${baseUrl}/auth/wallet/nonce?address=${walletAddr}`);
+    const nonce2Data = (await nonce2Res.json()) as any;
+    if (nonce2Res.status !== 200 || !nonce2Data.data?.message) {
+      throw new Error(
+        `Second wallet nonce fetch failed (status ${nonce2Res.status}). ` +
+          'Note: /auth/wallet/* shares the login rate limiter — raise RATE_LIMIT_AUTH_LOGIN_MAX when running this test.',
+      );
+    }
+    const tampered = `${nonce2Data.data.message}\nExtra: line`;
+    const tamperedSig = await testWallet.signMessage(tampered);
+    const tamperedRes = await postVerify({ address: walletAddr, message: tampered, signature: tamperedSig });
+    console.log('   Tampered Status:', tamperedRes.status);
+    if (tamperedRes.status !== 401) throw new Error('Tampered wallet challenge was accepted');
+
+    // 17e: issued message is domain-bound (EIP-4361 shape)
+    if (!/^.+ wants you to sign in with your Ethereum account:\n0x/.test(nonceData.data.message)) {
+      throw new Error('Wallet challenge is not an EIP-4361 message');
+    }
+    console.log('   Wallet replay / no-challenge / tampered cases all rejected.');
+
+    // Test 18: Merchant API key management
+    console.log('\n1️⃣8️⃣ Testing /merchants/me/api-keys (list / create / revoke) ...');
+    const authH = { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
+    const keysRes = await fetch(`${baseUrl}/merchants/me/api-keys`, { headers: authH });
+    const keysData = (await keysRes.json()) as any;
+    console.log('   List Status:', keysRes.status, 'Count:', keysData.data?.length);
+    if (keysRes.status !== 200 || !Array.isArray(keysData.data) || keysData.data.length < 1)
+      throw new Error('API key list failed');
+    if (keysData.data.some((k: any) => k.keyHash || k.rawKey)) throw new Error('API key list leaks secrets');
+
+    const newKeyRes = await fetch(`${baseUrl}/merchants/me/api-keys`, {
+      method: 'POST',
+      headers: authH,
+      body: JSON.stringify({ name: 'CI key' }),
+    });
+    const newKeyData = (await newKeyRes.json()) as any;
+    console.log('   Create Status:', newKeyRes.status, 'Prefix:', newKeyData.data?.keyPrefix);
+    if (newKeyRes.status !== 201 || !String(newKeyData.data?.rawKey).startsWith('qiflow_live_'))
+      throw new Error('API key creation failed');
+
+    const useNewKeyRes = await fetch(`${baseUrl}/v1/payments`, { headers: { 'X-API-Key': newKeyData.data.rawKey } });
+    console.log('   New key usable Status:', useNewKeyRes.status);
+    if (useNewKeyRes.status !== 200) throw new Error('Newly created API key was rejected');
+
+    const apiKeyOnMerchantRoute = await fetch(`${baseUrl}/merchants/me/api-keys`, {
+      method: 'POST',
+      headers: { 'X-API-Key': newKeyData.data.rawKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'should fail' }),
+    });
+    console.log('   API key cannot mint keys Status:', apiKeyOnMerchantRoute.status);
+    if (apiKeyOnMerchantRoute.status !== 401) throw new Error('API key was allowed to mint API keys');
+
+    const revokeRes = await fetch(`${baseUrl}/merchants/me/api-keys/${newKeyData.data.id}`, {
+      method: 'DELETE',
+      headers: authH,
+    });
+    console.log('   Revoke Status:', revokeRes.status);
+    if (revokeRes.status !== 200) throw new Error('API key revoke failed');
+    const useRevokedRes = await fetch(`${baseUrl}/v1/payments`, { headers: { 'X-API-Key': newKeyData.data.rawKey } });
+    console.log('   Revoked key Status:', useRevokedRes.status);
+    if (useRevokedRes.status !== 401) throw new Error('Revoked API key still works');
+
+    // Test 19: Receiving wallet is required before creating payments
+    console.log('\n1️⃣9️⃣ Testing wallet requirement + PUT /merchants/me ...');
+    const reg2Res = await fetch(`${baseUrl}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: `nowallet_${Date.now()}@example.com`,
+        password: 'Password123!',
+        businessName: 'No Wallet Yet',
+      }),
+    });
+    const reg2Data = (await reg2Res.json()) as any;
+    if (reg2Res.status !== 201) throw new Error('Second registration failed');
+    const auth2H = { Authorization: `Bearer ${reg2Data.data.tokens.accessToken}`, 'Content-Type': 'application/json' };
+
+    const noWalletPay = await fetch(`${baseUrl}/v1/payments`, {
+      method: 'POST',
+      headers: auth2H,
+      body: JSON.stringify({ amount: 1, currency: 'QI' }),
+    });
+    const noWalletData = (await noWalletPay.json()) as any;
+    console.log('   Create payment without wallet Status:', noWalletPay.status, noWalletData.error?.code);
+    if (noWalletPay.status !== 400 || noWalletData.error?.code !== 'WALLET_NOT_SET')
+      throw new Error('Payment creation without a wallet was not blocked');
+
+    const badWalletRes = await fetch(`${baseUrl}/merchants/me`, {
+      method: 'PUT',
+      headers: auth2H,
+      body: JSON.stringify({ walletAddress: '0x1234' }),
+    });
+    console.log('   Invalid wallet Status:', badWalletRes.status);
+    if (badWalletRes.status !== 400) throw new Error('Invalid wallet address was accepted');
+
+    const dupWalletRes = await fetch(`${baseUrl}/merchants/me`, {
+      method: 'PUT',
+      headers: auth2H,
+      body: JSON.stringify({ walletAddress: testWalletMixed }),
+    });
+    console.log('   Duplicate wallet Status:', dupWalletRes.status);
+    if (dupWalletRes.status !== 409) throw new Error('Duplicate wallet address was accepted');
+
+    const setWalletRes = await fetch(`${baseUrl}/merchants/me`, {
+      method: 'PUT',
+      headers: auth2H,
+      body: JSON.stringify({ walletAddress: `0x00FFEEDDCCBBAA998877665544332211${runHex.slice(-8).toUpperCase()}` }),
+    });
+    const setWalletData = (await setWalletRes.json()) as any;
+    console.log('   Set wallet Status:', setWalletRes.status, 'Saved:', setWalletData.data?.walletAddress);
+    if (setWalletRes.status !== 200 || setWalletData.data?.walletAddress !== `0x00ffeeddccbbaa998877665544332211${runHex.slice(-8)}`)
+      throw new Error('Wallet address was not saved / normalized');
+
+    const mismatchPay = await fetch(`${baseUrl}/v1/payments`, {
+      method: 'POST',
+      headers: auth2H,
+      body: JSON.stringify({ amount: 1, currency: 'QUAI' }),
+    });
+    const mismatchData = (await mismatchPay.json()) as any;
+    console.log('   QUAI payment to Qi wallet Status:', mismatchPay.status, mismatchData.error?.code);
+    if (mismatchPay.status !== 400 || mismatchData.error?.code !== 'WALLET_LEDGER_MISMATCH')
+      throw new Error('QUAI payment to a Qi address was not blocked');
+
+    const withWalletPay = await fetch(`${baseUrl}/v1/payments`, {
+      method: 'POST',
+      headers: auth2H,
+      body: JSON.stringify({ amount: 1, currency: 'QI' }),
+    });
+    const withWalletData = (await withWalletPay.json()) as any;
+    console.log('   Create payment with wallet Status:', withWalletPay.status, 'Checkout:', withWalletData.data?.checkoutUrl);
+    if (withWalletPay.status !== 201 || !withWalletData.data?.checkoutUrl)
+      throw new Error('Payment creation after setting wallet failed');
+
+    // Test 20: Refresh token rotation (dashboard keeps sessions alive with this)
+    console.log('\n2️⃣0️⃣ Testing POST /auth/refresh ...');
+    const refreshRes = await fetch(`${baseUrl}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: regData.data.tokens.refreshToken }),
+    });
+    const refreshData = (await refreshRes.json()) as any;
+    console.log('   Status:', refreshRes.status, 'New access token:', Boolean(refreshData.data?.accessToken));
+    if (refreshRes.status !== 200 || !refreshData.data?.accessToken || !refreshData.data?.refreshToken)
+      throw new Error('Token refresh failed');
+    const meRes = await fetch(`${baseUrl}/merchants/me`, { headers: { Authorization: `Bearer ${refreshData.data.accessToken}` } });
+    console.log('   Refreshed token works Status:', meRes.status);
+    if (meRes.status !== 200) throw new Error('Refreshed access token rejected');
 
     console.log('\n✨ ALL INTEGRATION TESTS PASSED 100% CLEANLY! ✨\n');
   } finally {
@@ -387,11 +613,19 @@ async function runIntegrationTest() {
     } catch {
       // ignore
     }
+    try {
+      const { redisClient } = await import('./lib/redis.js');
+      await redisClient.quit();
+    } catch {
+      // ignore
+    }
     server.close();
   }
 }
 
-runIntegrationTest().catch((err) => {
-  console.error('❌ Integration test failed:', err);
-  process.exit(1);
-});
+runIntegrationTest()
+  .then(() => process.exit(0))
+  .catch((err) => {
+    console.error('❌ Integration test failed:', err);
+    process.exit(1);
+  });

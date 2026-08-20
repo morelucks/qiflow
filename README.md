@@ -379,6 +379,30 @@ Applications can request payments programmatically.
 
 ---
 
+## 🛠 Local Development
+
+Day-to-day development runs the apps **on your host** (hot reload) against infra in Docker. App images are only built when you explicitly ask for them.
+
+```bash
+npm ci
+cp backend/.env.example backend/.env     # edit DATABASE_URL / REDIS_URL if needed
+
+docker compose up -d                     # Postgres + Redis only — no image builds
+npm --prefix backend run db:push         # apply the Prisma schema
+npm run dev                              # backend (tsx watch, :3001) + frontend (next dev, :3000)
+```
+
+- Host ports for the infra containers default to `5433` (Postgres) and `6379` (Redis). If those are taken on your machine, set `POSTGRES_PORT` / `REDIS_PORT` in a root `.env` (gitignored) — Docker Compose reads it automatically — and point `backend/.env` at the same ports.
+- Backend env is loaded from `backend/.env` (not the repo-root `.env.local`); `WEBHOOK_SECRET_KEY` must be a 64-hex string (`openssl rand -hex 32`).
+
+### Production images
+
+```bash
+docker compose --profile app up -d --build   # also builds & runs the backend and frontend images
+```
+
+The `app` profile keeps image builds out of the default `docker compose up -d`. The Dockerfile uses a BuildKit npm cache mount, so rebuilds after a lockfile change only fetch new packages. `NEXT_PUBLIC_API_URL` is baked into the frontend bundle at build time via the compose `build.args`.
+
 ## 📜 Smart Contracts & Testnet Deployments
 
 QiFlow smart contracts are deployed and verified on **Quai Network Testnet (Cyprus-1 Shard)**:

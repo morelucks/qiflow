@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, setTokens } from '@/lib/api-client';
 
 interface WalletLoginButtonProps {
   businessName?: string;
@@ -82,8 +82,7 @@ export function WalletLoginButton({ businessName, className = '' }: WalletLoginB
       });
 
       if (verifyRes.success && verifyRes.data?.tokens) {
-        localStorage.setItem('accessToken', verifyRes.data.tokens.accessToken);
-        localStorage.setItem('refreshToken', verifyRes.data.tokens.refreshToken);
+        setTokens(verifyRes.data.tokens);
         router.push('/dashboard');
       } else {
         throw new Error(verifyRes.error?.message || 'Wallet signature verification failed.');

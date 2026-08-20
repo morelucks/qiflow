@@ -1,9 +1,26 @@
 import crypto from 'crypto';
 import type { PaymentStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import type { CreatePaymentInput, SimulatePaymentInput } from '../schemas/payments.schema.js';
+import type { CreatePaymentInput, SimulatePaymentInput, SubmitTransactionInput } from '../schemas/payments.schema.js';
 import type { MerchantContext } from '../types/index.js';
 import { createError } from '../middleware/errorHandler.js';
+import { verifyPaymentOnChain } from './payment-verifier.js';
+import { logger } from '../lib/logger.js';
+import { addressLedger } from '@qiflow/shared';
+
+/** A wallet can only receive the currency of its own ledger (Qi vs Quai address). */
+export function assertWalletMatchesCurrency(walletAddress: string, currency: string) {
+  const ledger = addressLedger(walletAddress);
+  if (ledger && ledger !== currency.toUpperCase()) {
+    const other = ledger === 'QI' ? 'QUAI' : 'QI';
+    throw createError(
+      `Your receiving wallet is a ${ledger} address and cannot receive ${other}. ` +
+        `Choose ${ledger} for this payment, or set a ${other} receiving address in Settings.`,
+      400,
+      'WALLET_LEDGER_MISMATCH',
+    );
+  }
+}
 
 export type { MerchantContext };
 
@@ -30,6 +47,26 @@ export class PaymentsService {
       throw createError('Payment code not found', 404, 'NOT_FOUND');
     }
 
+    // Lazily expire stale sessions
+    if ((payment.status === 'CREATED' || payment.status === 'PENDING') && payment.expiresAt < new Date()) {
+      payment.status = (
+        await prisma.payment.update({ where: { id: payment.id }, data: { status: 'EXPIRED' } })
+      ).status;
+    }
+
+    // Lazily verify a submitted tx (the checkout page polls this endpoint)
+    if (payment.status === 'PROCESSING' && payment.txHash) {
+      const outcome = await verifyPaymentOnChain(payment);
+      if (outcome === 'confirmed' || outcome === 'failed') {
+        const fresh = await prisma.payment.findUnique({ where: { id: payment.id } });
+        if (fresh) {
+          payment.status = fresh.status;
+          payment.txHash = fresh.txHash;
+          payment.completedAt = fresh.completedAt;
+        }
+      }
+    }
+
     return {
       id: payment.id,
       paymentCode: payment.paymentCode,
@@ -39,6 +76,7 @@ export class PaymentsService {
       status: payment.status,
       receivingAddress: payment.receivingAddress,
       txHash: payment.txHash,
+      completedAt: payment.completedAt,
       merchantName: payment.merchant.businessName,
       checkoutUrl: getPaymentCheckoutUrl(payment.paymentCode),
       expiresAt: payment.expiresAt,
@@ -50,7 +88,15 @@ export class PaymentsService {
     const paymentCode = `pay_${crypto.randomBytes(12).toString('hex')}`;
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes validity
 
-    const receivingAddress = merchant.walletAddress || '0x0000000000000000000000000000000000000000';
+    if (!merchant.walletAddress) {
+      throw createError(
+        'Set your receiving wallet address in Settings before creating payments.',
+        400,
+        'WALLET_NOT_SET',
+      );
+    }
+    assertWalletMatchesCurrency(merchant.walletAddress, input.currency);
+    const receivingAddress = merchant.walletAddress;
 
     const payment = await prisma.payment.create({
       data: {
@@ -76,6 +122,54 @@ export class PaymentsService {
       checkoutUrl: getPaymentCheckoutUrl(payment.paymentCode),
       expiresAt: payment.expiresAt,
       createdAt: payment.createdAt,
+    };
+  }
+
+  /**
+   * Public: a payer reports the on-chain tx hash for a checkout session.
+   * Moves the payment to PROCESSING; confirmation happens via on-chain verification.
+   */
+  static async submitTransaction(code: string, input: SubmitTransactionInput) {
+    const payment = await prisma.payment.findUnique({ where: { paymentCode: code } });
+    if (!payment) {
+      throw createError('Payment code not found', 404, 'NOT_FOUND');
+    }
+    if (payment.status === 'COMPLETED') {
+      throw createError('This payment has already been completed.', 409, 'ALREADY_COMPLETED');
+    }
+    if (payment.status === 'EXPIRED' || payment.status === 'CANCELLED' || payment.status === 'FAILED') {
+      throw createError(`This payment is ${payment.status.toLowerCase()} and can no longer accept a transaction.`, 409, 'PAYMENT_CLOSED');
+    }
+    if (payment.status === 'PROCESSING' && payment.txHash && payment.txHash !== input.txHash) {
+      throw createError('A different transaction is already being verified for this payment.', 409, 'TX_ALREADY_SUBMITTED');
+    }
+    if (payment.expiresAt < new Date()) {
+      await prisma.payment.update({ where: { id: payment.id }, data: { status: 'EXPIRED' } });
+      throw createError('This payment session has expired.', 410, 'PAYMENT_EXPIRED');
+    }
+
+    const updated = await prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        status: 'PROCESSING',
+        txHash: input.txHash,
+        ...(input.payerAddress
+          ? { metadata: { ...((payment.metadata as object) ?? {}), payerAddress: input.payerAddress.toLowerCase() } }
+          : {}),
+      },
+    });
+
+    // Kick off verification immediately; the checkout page keeps polling until final.
+    verifyPaymentOnChain(updated).catch((err) =>
+      logger.warn({ err, paymentId: updated.id }, 'Initial verification attempt failed'),
+    );
+
+    return {
+      id: updated.id,
+      paymentCode: updated.paymentCode,
+      status: updated.status,
+      txHash: updated.txHash,
+      checkoutUrl: getPaymentCheckoutUrl(updated.paymentCode),
     };
   }
 

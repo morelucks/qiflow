@@ -8,6 +8,7 @@ import { Card } from '../../../components/ui/Card';
 import { Modal } from '../../../components/ui/Modal';
 import { apiClient } from '../../../lib/api-client';
 import { formatAmount } from '../../../lib/formatters';
+import { SkeletonCard } from '../../../components/ui/Skeleton';
 
 export default function PaymentLinksPage() {
   const [links, setLinks] = useState<PaymentLink[]>([]);
@@ -138,7 +139,11 @@ export default function PaymentLinksPage() {
 
       {/* Grid of Payment Links */}
       {loading ? (
-        <Card className="p-12 text-center text-sm text-gray-400">Loading payment links...</Card>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
+        </div>
       ) : links.length === 0 ? (
         <Card className="px-6 py-16 text-center">
           <p className="text-gray-400 dark:text-gray-500 text-sm font-medium">No payment links created yet</p>
