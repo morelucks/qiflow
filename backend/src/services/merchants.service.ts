@@ -70,6 +70,79 @@ export class MerchantsService {
     }
   }
 
+  // ── Dashboard stats ─────────────────────────────────────────────────────────
+
+  static async getDashboardStats(merchantId: string) {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const [merchant, completed, completedToday, statusCounts, recent, apiKeyCount, webhookCount] =
+      await Promise.all([
+        prisma.merchant.findUnique({ where: { id: merchantId }, select: { walletAddress: true } }),
+        prisma.payment.groupBy({
+          by: ['currency'],
+          where: { merchantId, status: 'COMPLETED' },
+          _sum: { amount: true },
+          _count: { _all: true },
+        }),
+        prisma.payment.groupBy({
+          by: ['currency'],
+          where: { merchantId, status: 'COMPLETED', completedAt: { gte: startOfToday } },
+          _sum: { amount: true },
+          _count: { _all: true },
+        }),
+        prisma.payment.groupBy({
+          by: ['status'],
+          where: { merchantId },
+          _count: { _all: true },
+        }),
+        prisma.payment.findMany({
+          where: { merchantId },
+          orderBy: { createdAt: 'desc' },
+          take: 6,
+        }),
+        prisma.apiKey.count({ where: { merchantId, isActive: true } }),
+        prisma.webhook.count({ where: { merchantId, isActive: true } }),
+      ]);
+
+    const toTotals = (rows: typeof completed) =>
+      rows.map((r) => ({
+        currency: r.currency,
+        amount: (r._sum.amount ?? 0).toString(),
+        count: r._count._all,
+      }));
+
+    const byStatus: Record<string, number> = {};
+    let totalPayments = 0;
+    for (const row of statusCounts) {
+      byStatus[row.status] = row._count._all;
+      totalPayments += row._count._all;
+    }
+
+    return {
+      received: toTotals(completed),
+      receivedToday: toTotals(completedToday),
+      payments: { total: totalPayments, byStatus },
+      recent: recent.map((p) => ({
+        id: p.id,
+        paymentCode: p.paymentCode,
+        amount: p.amount.toString(),
+        currency: p.currency,
+        description: p.description,
+        status: p.status,
+        txHash: p.txHash,
+        createdAt: p.createdAt,
+        completedAt: p.completedAt,
+      })),
+      setup: {
+        walletSet: Boolean(merchant?.walletAddress),
+        hasApiKey: apiKeyCount > 0,
+        hasWebhook: webhookCount > 0,
+        hasPayment: totalPayments > 0,
+      },
+    };
+  }
+
   // ── API keys ────────────────────────────────────────────────────────────────
 
   static async listApiKeys(merchantId: string) {

@@ -588,6 +588,18 @@ async function runIntegrationTest() {
     if (withWalletPay.status !== 201 || !withWalletData.data?.checkoutUrl)
       throw new Error('Payment creation after setting wallet failed');
 
+    // Test 19b: Dashboard stats
+    console.log('\n1️⃣9️⃣b Testing GET /merchants/me/stats ...');
+    const statsRes = await fetch(`${baseUrl}/merchants/me/stats`, { headers: { Authorization: `Bearer ${accessToken}` } });
+    const statsData = (await statsRes.json()) as any;
+    console.log('   Status:', statsRes.status, 'payments:', statsData.data?.payments?.total, 'received:', JSON.stringify(statsData.data?.received));
+    if (statsRes.status !== 200 || typeof statsData.data?.payments?.total !== 'number' || !Array.isArray(statsData.data?.recent))
+      throw new Error('Dashboard stats endpoint failed');
+    if (!statsData.data.setup?.walletSet || !statsData.data.setup?.hasApiKey || !statsData.data.setup?.hasWebhook)
+      throw new Error('Dashboard stats setup flags are wrong');
+    if (!statsData.data.received.some((r: any) => r.currency === 'QI' && parseFloat(r.amount) > 0))
+      throw new Error('Dashboard stats did not sum completed QI payments');
+
     // Test 20: Refresh token rotation (dashboard keeps sessions alive with this)
     console.log('\n2️⃣0️⃣ Testing POST /auth/refresh ...');
     const refreshRes = await fetch(`${baseUrl}/auth/refresh`, {
