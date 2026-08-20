@@ -112,15 +112,13 @@ export function Sidebar({ open, onClose }: SidebarProps) {
 
         {/* Footer */}
         <div className="px-3 py-4 border-t border-violet/20 space-y-1">
-          <a
-            href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/docs`}
-            target="_blank"
-            rel="noreferrer"
+          <Link
+            href="/docs"
             className="flex items-center gap-3 h-10 px-3 rounded-xl text-sm text-slate-300 hover:text-white hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-mint"
           >
             <span aria-hidden="true" className="text-slate-400 font-mono text-xs w-[18px] text-center">{'{}'}</span>
             API docs
-          </a>
+          </Link>
           <button
             type="button"
             onClick={logout}

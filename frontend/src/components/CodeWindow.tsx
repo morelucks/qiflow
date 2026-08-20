@@ -5,8 +5,8 @@ import { useState } from 'react';
 export default function CodeWindow() {
   const [copied, setCopied] = useState(false);
 
-  const codeString = `curl -X POST https://api.qiflow.io/v1/payments \\
-  -H "Authorization: Bearer qiflow_sec_9a8f..." \\
+  const codeString = `curl -X POST ${process.env.NEXT_PUBLIC_API_URL || 'https://api.qiflow.io'}/v1/payments \\
+  -H "X-API-Key: qiflow_live_9a8f..." \\
   -H "Content-Type: application/json" \\
   -d '{
     "amount": 25.50,
