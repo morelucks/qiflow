@@ -5,12 +5,28 @@ const config: Config = {
   content: [
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/sections/**/*.{js,ts,jsx,tsx,mdx}',
     './src/app/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
     extend: {
       colors: {
-        // Official QiFlow Brand Palette
+        ink: '#13102B',
+        indigo: {
+          DEFAULT: '#1E1B4B',
+          light: '#2D2A6B',
+        },
+        violet: {
+          DEFAULT: '#6C4AB6',
+          soft: 'rgba(108, 74, 182, 0.15)',
+          glow: 'rgba(108, 74, 182, 0.4)',
+        },
+        mint: {
+          DEFAULT: '#00E6A8',
+          soft: 'rgba(0, 230, 168, 0.12)',
+          glow: 'rgba(0, 230, 168, 0.35)',
+        },
+        // Legacy Brand Palette Aliases
         qiflow: {
           ink: '#13102B',
           indigo: '#1E1B4B',
@@ -43,13 +59,24 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'Menlo', 'monospace'],
+        sans: ['Space Grotesk', 'Inter', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
+      },
+      borderRadius: {
+        '2xl': '20px',
+        'xl': '14px',
+      },
+      boxShadow: {
+        'glow-mint': '0 0 40px rgba(0, 230, 168, 0.35)',
+        'glow-violet': '0 0 40px rgba(108, 74, 182, 0.4)',
+        'card': '0 8px 32px rgba(0,0,0,0.4)',
+        'card-lg': '0 20px 60px rgba(0,0,0,0.5)',
       },
       animation: {
         'fade-in': 'fadeIn 0.2s ease-in-out',
         'slide-up': 'slideUp 0.3s ease-out',
-        pulse: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        drift: 'drift 22s ease-in-out infinite',
+        'pulse-glow': 'pulse-glow 2.5s ease-in-out infinite',
       },
       keyframes: {
         fadeIn: {
@@ -59,6 +86,15 @@ const config: Config = {
         slideUp: {
           '0%': { transform: 'translateY(8px)', opacity: '0' },
           '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+        drift: {
+          '0%, 100%': { transform: 'translate(0, 0) scale(1)' },
+          '33%': { transform: 'translate(40px, -30px) scale(1.1)' },
+          '66%': { transform: 'translate(-30px, 20px) scale(0.95)' },
+        },
+        'pulse-glow': {
+          '0%, 100%': { opacity: '1', boxShadow: '0 0 12px rgba(0, 230, 168, 0.35)' },
+          '50%': { opacity: '0.5', boxShadow: '0 0 4px rgba(0, 230, 168, 0.35)' },
         },
       },
     },
