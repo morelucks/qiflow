@@ -10,6 +10,7 @@ router.post('/', WebhooksController.createWebhook);
 router.get('/', WebhooksController.listWebhooks);
 router.put('/:id', WebhooksController.updateWebhook);
 router.delete('/:id', WebhooksController.deleteWebhook);
+router.post('/:id/test', WebhooksController.testWebhook);
 router.get('/deliveries', WebhooksController.listDeliveries);
 router.post('/deliveries/:id/retry', WebhooksController.retryDelivery);
 

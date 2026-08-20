@@ -92,9 +92,17 @@ export class PaymentLinksService {
       finalAmount = String(customAmount);
     }
 
+    if (!link.merchant.walletAddress) {
+      throw createError(
+        'This merchant has not configured a receiving wallet yet, so payments cannot be accepted.',
+        400,
+        'WALLET_NOT_SET',
+      );
+    }
+
     const paymentCode = generatePaymentCode();
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
-    const receivingAddress = link.merchant.walletAddress || '0x0000000000000000000000000000000000000000';
+    const receivingAddress = link.merchant.walletAddress;
 
     const payment = await prisma.payment.create({
       data: {

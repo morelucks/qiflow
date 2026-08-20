@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, setTokens } from '@/lib/api-client';
 
 import { WalletLoginButton } from '@/components/auth/WalletLoginButton';
 
@@ -30,8 +30,7 @@ export default function RegisterPage() {
       });
 
       if (res.success && res.data?.tokens) {
-        localStorage.setItem('accessToken', res.data.tokens.accessToken);
-        localStorage.setItem('refreshToken', res.data.tokens.refreshToken);
+        setTokens(res.data.tokens);
         router.push('/dashboard');
       } else {
         setError(res.error?.message || 'Registration failed');

@@ -1,11 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import type { MerchantProfile, Payment } from '../../../../types';
+import { apiClient } from '../../../../lib/api-client';
 
 export default function NewPaymentPage() {
+  const [profile, setProfile] = useState<MerchantProfile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState('QI');
   const [description, setDescription] = useState('');
@@ -18,19 +21,28 @@ export default function NewPaymentPage() {
   } | null>(null);
   const [copied, setCopied] = useState(false);
 
+  useEffect(() => {
+    apiClient<MerchantProfile>('/merchants/me').then((res) => {
+      if (res.success && res.data) setProfile(res.data);
+      setProfileLoading(false);
+    });
+  }, []);
+
+  const hasWallet = Boolean(profile?.walletAddress);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     if (!amount || parseFloat(amount) <= 0) return;
+    if (!hasWallet) {
+      setError('Set your receiving wallet in Settings before creating payments.');
+      return;
+    }
 
     try {
       setLoading(true);
-      const token = localStorage.getItem('accessToken');
-      const res = await fetch(`${API_BASE}/v1/payments`, {
+      const res = await apiClient<Payment>('/v1/payments', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
         body: JSON.stringify({
           amount: parseFloat(amount),
           currency,
@@ -38,21 +50,22 @@ export default function NewPaymentPage() {
         }),
       });
 
-      const data = await res.json();
-      if (data.success) {
-        const paymentData = data.data;
-        const fallbackUrl = paymentData?.paymentCode
+      if (res.success && res.data) {
+        const paymentData = res.data;
+        const fallbackUrl = paymentData.paymentCode
           ? `${window.location.origin}/pay/${paymentData.paymentCode}`
           : '';
         setCreatedPayment({
-          ...paymentData,
+          paymentCode: paymentData.paymentCode,
+          receivingAddress: paymentData.receivingAddress,
+          amount: paymentData.amount,
           checkoutUrl: paymentData.checkoutUrl || fallbackUrl,
         });
       } else {
-        alert(data.error?.message || 'Failed to create payment');
+        setError(res.error?.message || 'Failed to create payment');
       }
     } catch {
-      alert('Network error creating payment');
+      setError('Network error creating payment');
     } finally {
       setLoading(false);
     }
@@ -81,6 +94,28 @@ export default function NewPaymentPage() {
           Generate a one-time payment request with checkout link and deposit address.
         </p>
       </div>
+
+      {!profileLoading && !hasWallet && (
+        <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-sm text-amber-800 dark:text-amber-300 space-y-2">
+          <p className="font-semibold">Receiving wallet required</p>
+          <p className="text-xs">
+            Payments are sent straight to your wallet, so you need to add a Quai address before you can
+            create a payment.
+          </p>
+          <Link
+            href="/dashboard/settings"
+            className="inline-block text-xs font-semibold underline underline-offset-2"
+          >
+            Set receiving wallet in Settings →
+          </Link>
+        </div>
+      )}
+
+      {error && (
+        <div className="p-3 text-xs rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300">
+          {error}
+        </div>
+      )}
 
       {!createdPayment ? (
         <form
@@ -127,10 +162,10 @@ export default function NewPaymentPage() {
 
           <button
             type="submit"
-            disabled={loading}
-            className="w-full bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white font-semibold py-3 rounded-xl shadow-md transition-all text-sm disabled:opacity-50 mt-4"
+            disabled={loading || profileLoading || !hasWallet}
+            className="w-full bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white font-semibold py-3 rounded-xl shadow-md transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed mt-4"
           >
-            {loading ? 'Generating...' : 'Generate Payment Session'}
+            {loading ? 'Generating...' : !hasWallet && !profileLoading ? 'Set a receiving wallet first' : 'Generate Payment Session'}
           </button>
         </form>
       ) : (

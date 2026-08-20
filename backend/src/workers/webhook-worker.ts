@@ -1,15 +1,9 @@
 import { Worker } from 'bullmq';
 import type { Job } from 'bullmq';
 import { prisma } from '../lib/prisma.js';
-import { decryptWebhookSecret } from '../lib/webhook-crypto.js';
 import { redisConnection } from '../lib/webhook-queue.js';
-import {
-  signPayload,
-  WEBHOOK_RETRY_DELAYS_MS,
-  WEBHOOK_SIGNATURE_HEADER,
-  WEBHOOK_TIMESTAMP_HEADER,
-  WEBHOOK_EVENT_HEADER,
-} from '@qiflow/shared';
+import { sendSignedWebhook } from '../lib/webhook-delivery.js';
+import { WEBHOOK_RETRY_DELAYS_MS } from '@qiflow/shared';
 import { logger } from '../lib/logger.js';
 
 let worker: Worker | null = null;
@@ -33,61 +27,14 @@ export function startWebhookWorker() {
         return;
       }
 
-      // 2. Decrypt secret
-      const secret = decryptWebhookSecret(webhook.secret);
-
-      // 3. Prepare payload and sign
-      const rawBody = Buffer.from(JSON.stringify(payload));
-      const signature = signPayload(rawBody, secret);
-      const timestamp = Math.floor(Date.now() / 1000);
-
-      // 4. Send POST request with 10s timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10_000);
-
-      let statusCode: number | null = null;
-      let responseBody: string | null = null;
-      let isSuccess = false;
-      let errorMsg: string | null = null;
-
-      try {
-        const response = await fetch(webhook.url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            [WEBHOOK_SIGNATURE_HEADER]: signature,
-            [WEBHOOK_TIMESTAMP_HEADER]: timestamp.toString(),
-            [WEBHOOK_EVENT_HEADER]: event,
-          },
-          body: JSON.stringify(payload),
-          signal: controller.signal,
-        });
-
-        statusCode = response.status;
-        isSuccess = response.status >= 200 && response.status < 300;
-
-        const text = await response.text();
-        responseBody = text.substring(0, 1024); // Truncate response to 1KB
-      } catch (err: unknown) {
-
-        console.error('❌ Webhook fetch failed:', {
-          url: webhook.url,
-          error: err instanceof Error ? err.message : String(err),
-        });
-
-        if (err instanceof Error) {
-          if (err.name === 'AbortError' || err.message.includes('aborted')) {
-            errorMsg = 'Timeout: request took longer than 10 seconds';
-          } else {
-            errorMsg = err.message;
-          }
-        } else {
-          errorMsg = String(err);
-        }
-
-        responseBody = errorMsg.substring(0, 1024);
-      } finally {
-        clearTimeout(timeoutId);
+      // 2-4. Sign and POST (shared with retries and test sends)
+      const result = await sendSignedWebhook(webhook, event, payload);
+      const statusCode = result.statusCode;
+      const responseBody = result.responseBody;
+      const isSuccess = result.ok;
+      const errorMsg = result.error;
+      if (!isSuccess) {
+        logger.warn({ url: webhook.url, statusCode, error: errorMsg }, 'Webhook delivery attempt failed');
       }
 
       // 5. Determine status and retry timing

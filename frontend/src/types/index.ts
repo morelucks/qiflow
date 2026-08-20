@@ -20,6 +20,7 @@ export interface Payment {
   completedAt: string | null;
   createdAt: string;
   merchantName?: string;
+  checkoutUrl?: string;
 }
 
 export interface PaymentLink {
@@ -63,8 +64,33 @@ export interface WebhookDelivery {
 
 export interface MerchantProfile {
   id: string;
-  email: string;
+  email: string | null;
   businessName: string;
   walletAddress: string | null;
   createdAt: string;
+  apiKeys?: ApiKey[];
+}
+
+export interface ApiKey {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  lastFour: string;
+  isActive: boolean;
+  lastUsedAt: string | null;
+  createdAt: string;
+  /** Only present in the create response — shown once. */
+  rawKey?: string;
+}
+
+export interface WebhookTestResult {
+  webhookId: string;
+  url: string;
+  event: string;
+  ok: boolean;
+  statusCode: number | null;
+  durationMs: number;
+  responseBody: string | null;
+  error: string | null;
+  sentAt: string;
 }

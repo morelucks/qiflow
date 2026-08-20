@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import type { Webhook, WebhookDelivery } from '../../../types';
+import type { Webhook, WebhookDelivery, WebhookTestResult } from '../../../types';
 import { Badge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
 import { Card } from '../../../components/ui/Card';
@@ -16,6 +16,8 @@ export default function WebhooksPage() {
   const [submitting, setSubmitting] = useState(false);
   const [createdSecret, setCreatedSecret] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [testingId, setTestingId] = useState<string | null>(null);
+  const [testResults, setTestResults] = useState<Record<string, WebhookTestResult | { requestFailed: true; message: string }>>({});
 
   const fetchData = async () => {
     try {
@@ -77,6 +79,22 @@ export default function WebhooksPage() {
       fetchData();
     } catch {
       alert('Failed to delete webhook');
+    }
+  };
+
+  const handleTest = async (id: string) => {
+    try {
+      setTestingId(id);
+      const res = await apiClient<WebhookTestResult>(`/v1/webhooks/${id}/test`, { method: 'POST' });
+      if (res.success && res.data) {
+        setTestResults((prev) => ({ ...prev, [id]: res.data! }));
+      } else {
+        setTestResults((prev) => ({ ...prev, [id]: { requestFailed: true, message: res.error?.message || 'Test request failed' } }));
+      }
+    } catch {
+      setTestResults((prev) => ({ ...prev, [id]: { requestFailed: true, message: 'Test request failed' } }));
+    } finally {
+      setTestingId(null);
     }
   };
 
@@ -146,21 +164,60 @@ export default function WebhooksPage() {
             <div className="p-12 text-center text-sm text-gray-400">No webhooks registered yet.</div>
           ) : (
             <div className="divide-y divide-gray-200 dark:divide-gray-800">
-              {webhooks.map((w) => (
-                <div key={w.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                  <div className="space-y-1">
-                    <p className="font-mono font-bold text-gray-900 dark:text-white">{w.url}</p>
-                    <div className="flex items-center gap-2 text-gray-500">
-                      <span>Secret: {w.secretPrefix}</span>
-                      <span>•</span>
-                      <span>Events: {w.events.join(', ')}</span>
+              {webhooks.map((w) => {
+                const result = testResults[w.id];
+                return (
+                  <div key={w.id} className="p-4 space-y-3 text-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="space-y-1 min-w-0">
+                        <p className="font-mono font-bold text-gray-900 dark:text-white break-all">{w.url}</p>
+                        <div className="flex items-center gap-2 text-gray-500">
+                          <span>Secret: {w.secretPrefix}</span>
+                          <span>•</span>
+                          <span>Events: {w.events.join(', ')}</span>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <Button variant="secondary" size="sm" loading={testingId === w.id} onClick={() => handleTest(w.id)}>
+                          Send test event
+                        </Button>
+                        <Button variant="danger" size="sm" onClick={() => handleDelete(w.id)}>
+                          Delete
+                        </Button>
+                      </div>
                     </div>
+                    {result && (
+                      'requestFailed' in result ? (
+                        <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300">
+                          {result.message}
+                        </div>
+                      ) : (
+                        <div
+                          className={`p-3 rounded-lg border space-y-1 ${
+                            result.ok
+                              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+                              : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300'
+                          }`}
+                        >
+                          <p className="font-semibold">
+                            {result.ok ? 'Test event delivered' : 'Test event failed'} —{' '}
+                            {result.statusCode !== null ? `HTTP ${result.statusCode}` : 'no response'} in {result.durationMs}ms
+                          </p>
+                          <p className="text-[11px] opacity-80">
+                            Sent <code className="font-mono">webhook.test</code> signed with this endpoint&apos;s secret
+                            (<code className="font-mono">X-QiFlow-Signature</code> / <code className="font-mono">X-QiFlow-Timestamp</code>).
+                          </p>
+                          {(result.error || result.responseBody) && (
+                            <p className="font-mono text-[11px] break-all opacity-80">
+                              {result.error || result.responseBody}
+                            </p>
+                          )}
+                        </div>
+                      )
+                    )}
                   </div>
-                  <Button variant="danger" size="sm" onClick={() => handleDelete(w.id)}>
-                    Delete
-                  </Button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </Card>

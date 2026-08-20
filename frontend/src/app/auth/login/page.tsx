@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, setTokens } from '@/lib/api-client';
 
 import { WalletLoginButton } from '@/components/auth/WalletLoginButton';
 
@@ -12,7 +12,21 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('reason') === 'expired') {
+      setNotice('Your session expired. Please log in again.');
+    }
+  }, []);
+
+  const nextPath = () => {
+    const params = new URLSearchParams(window.location.search);
+    const next = params.get('next');
+    return next && next.startsWith('/') ? next : '/dashboard';
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,9 +43,8 @@ export default function LoginPage() {
       });
 
       if (res.success && res.data?.tokens) {
-        localStorage.setItem('accessToken', res.data.tokens.accessToken);
-        localStorage.setItem('refreshToken', res.data.tokens.refreshToken);
-        router.push('/dashboard');
+        setTokens(res.data.tokens);
+        router.push(nextPath());
       } else {
         setError(res.error?.message || 'Invalid email or password');
       }
@@ -59,6 +72,12 @@ export default function LoginPage() {
             </Link>
           </p>
         </div>
+
+        {notice && (
+          <div className="mb-4 p-3 text-sm text-amber-700 bg-amber-50 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-800 rounded-lg">
+            {notice}
+          </div>
+        )}
 
         {error && (
           <div className="mb-4 p-3 text-sm text-red-600 bg-red-50 dark:bg-red-950/50 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-lg">

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { walletAddressSchema } from './merchants.schema.js';
 
 export const registerSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -9,7 +10,7 @@ export const registerSchema = z.object({
     .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
     .regex(/[0-9]/, 'Password must contain at least one number'),
   businessName: z.string().min(2, 'Business name must be at least 2 characters').max(100),
-  walletAddress: z.string().optional(),
+  walletAddress: walletAddressSchema.optional(),
 });
 
 export const loginSchema = z.object({
@@ -23,7 +24,7 @@ export const refreshTokenSchema = z.object({
 
 export const updateProfileSchema = z.object({
   businessName: z.string().min(2).max(100).optional(),
-  walletAddress: z.string().nullable().optional(),
+  walletAddress: walletAddressSchema.optional(),
 });
 
 export const createApiKeySchema = z.object({

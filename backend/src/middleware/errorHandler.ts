@@ -19,9 +19,12 @@ export const errorHandler: ErrorRequestHandler = (
 ) => {
   // Zod validation errors
   if (err instanceof ZodError) {
+    const fieldErrors = err.flatten().fieldErrors;
+    const first = Object.entries(fieldErrors).find(([, msgs]) => msgs && msgs.length > 0);
+    const message = first ? `${first[0]}: ${first[1]![0]}` : 'Validation failed';
     res.status(400).json({
-      error: 'Validation failed',
-      details: err.flatten().fieldErrors,
+      success: false,
+      error: { code: 'VALIDATION_ERROR', message, details: fieldErrors },
     });
     return;
   }
@@ -33,18 +36,24 @@ export const errorHandler: ErrorRequestHandler = (
     logger.error({ err, req: { method: req.method, url: req.url } }, 'Unhandled error');
   }
 
-  const body: Record<string, string> = { error: message };
-  if (err.code !== undefined) {
-    body['code'] = err.code;
-  }
-  res.status(statusCode).json(body);
+  // Same envelope the auth middleware and the dashboard client use: { success, error: { code, message } }
+  res.status(statusCode).json({
+    success: false,
+    error: {
+      code: err.code ?? (statusCode >= 500 ? 'INTERNAL_ERROR' : 'REQUEST_FAILED'),
+      message,
+    },
+  });
 };
 
 /**
  * 404 handler — must be registered after all routes, before errorHandler.
  */
 export function notFoundHandler(req: Request, res: Response): void {
-  res.status(404).json({ error: `Route ${req.method} ${req.path} not found` });
+  res.status(404).json({
+    success: false,
+    error: { code: 'NOT_FOUND', message: `Route ${req.method} ${req.path} not found` },
+  });
 }
 
 /**

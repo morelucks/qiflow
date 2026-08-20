@@ -48,6 +48,17 @@ static async updateWebhook(req: Request, res: Response, next: NextFunction) {
     }
   }
 
+  static async testWebhook(req: Request, res: Response, next: NextFunction) {
+    try {
+      const merchantId = req.merchant!.id;
+      const id = req.params.id as string;
+      const data = await WebhooksService.testWebhook(merchantId, id);
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   static async listDeliveries(req: Request, res: Response, next: NextFunction) {
     try {
       const merchantId = req.merchant!.id;

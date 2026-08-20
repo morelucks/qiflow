@@ -1,4 +1,5 @@
 import bcrypt from 'bcrypt';
+import { Prisma } from '@prisma/client';
 import crypto from 'crypto';
 import { verifyMessage, getAddress } from 'ethers';
 import { prisma } from '../lib/prisma.js';
@@ -176,14 +177,26 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(input.password, 12);
 
-    const merchant = await prisma.merchant.create({
-      data: {
-        email: input.email,
-        passwordHash,
-        businessName: input.businessName,
-        walletAddress: input.walletAddress ?? null,
-      },
-    });
+    let merchant;
+    try {
+      merchant = await prisma.merchant.create({
+        data: {
+          email: input.email,
+          passwordHash,
+          businessName: input.businessName,
+          walletAddress: input.walletAddress ?? null,
+        },
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        const target = (err.meta?.target as string[] | undefined)?.join(',') ?? '';
+        if (target.includes('wallet')) {
+          throw createError('This wallet address is already linked to another merchant account.', 409, 'WALLET_IN_USE');
+        }
+        throw createError('An account with this email address already exists.', 409, 'EMAIL_EXISTS');
+      }
+      throw err;
+    }
 
     // Create default API key using generateApiKey utility
     const generatedKey = generateApiKey('live');
