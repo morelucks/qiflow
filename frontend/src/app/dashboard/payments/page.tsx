@@ -9,6 +9,7 @@ import { Modal } from '../../../components/ui/Modal';
 import { Card } from '../../../components/ui/Card';
 import { apiClient } from '../../../lib/api-client';
 import { formatDate, formatAmount, truncateAddress } from '../../../lib/formatters';
+import { SkeletonTableRows } from '../../../components/ui/Skeleton';
 
 export default function PaymentsPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -125,7 +126,23 @@ export default function PaymentsPage() {
       {/* Table Card */}
       <Card className="!p-0 overflow-hidden">
         {loading ? (
-          <div className="p-12 text-center text-sm text-gray-400">Loading payments...</div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/50 text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th className="px-6 py-3.5">Payment Code</th>
+                  <th className="px-6 py-3.5">Amount</th>
+                  <th className="px-6 py-3.5">Status</th>
+                  <th className="px-6 py-3.5">Description</th>
+                  <th className="px-6 py-3.5">Created At</th>
+                  <th className="px-6 py-3.5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                <SkeletonTableRows rows={6} cols={6} />
+              </tbody>
+            </table>
+          </div>
         ) : filteredPayments.length === 0 ? (
           <div className="px-6 py-16 text-center">
             <p className="text-gray-400 dark:text-gray-500 text-sm font-medium">No payments found</p>

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import type { MerchantProfile, Payment } from '../../../../types';
 import { apiClient } from '../../../../lib/api-client';
 import { addressLedger } from '@qiflow/shared';
+import { Skeleton } from '../../../../components/ui/Skeleton';
 
 export default function NewPaymentPage() {
   const [profile, setProfile] = useState<MerchantProfile | null>(null);
@@ -125,8 +126,19 @@ export default function NewPaymentPage() {
       )}
 
       {profileLoading ? (
-        <div className="flex justify-center py-12">
-          <div className="w-8 h-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" />
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm space-y-4" aria-busy="true">
+          <div className="space-y-2">
+            <Skeleton className="h-3 w-16" />
+            <div className="flex gap-2">
+              <Skeleton className="h-10 flex-1 rounded-xl" />
+              <Skeleton className="h-10 w-24 rounded-xl" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Skeleton className="h-3 w-32" />
+            <Skeleton className="h-10 w-full rounded-xl" />
+          </div>
+          <Skeleton className="h-11 w-full rounded-xl mt-4" />
         </div>
       ) : !hasWallet ? null : !createdPayment ? (
         <form

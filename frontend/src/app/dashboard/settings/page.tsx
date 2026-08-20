@@ -7,6 +7,7 @@ import { Card } from '../../../components/ui/Card';
 import { apiClient } from '../../../lib/api-client';
 import { formatDate } from '../../../lib/formatters';
 import { addressLedger } from '@qiflow/shared';
+import { Skeleton, SkeletonListRows } from '../../../components/ui/Skeleton';
 
 const WALLET_RE = /^0x[a-fA-F0-9]{40}$/;
 
@@ -120,10 +121,19 @@ export default function SettingsPage() {
 
       {/* Profile summary */}
       <Card className="space-y-1 text-sm">
-        <p className="font-semibold text-gray-900 dark:text-white">{profile?.businessName ?? (loading ? 'Loading…' : '—')}</p>
-        <p className="text-gray-500 dark:text-gray-400 text-xs">
-          {profile?.email ?? 'Wallet-only account (no email)'}
-        </p>
+        {loading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-3 w-56" />
+          </div>
+        ) : (
+          <>
+            <p className="font-semibold text-gray-900 dark:text-white">{profile?.businessName ?? '—'}</p>
+            <p className="text-gray-500 dark:text-gray-400 text-xs">
+              {profile?.email ?? 'Wallet-only account (no email)'}
+            </p>
+          </>
+        )}
       </Card>
 
       {/* Receiving wallet */}
@@ -147,6 +157,12 @@ export default function SettingsPage() {
             ledger in the address, so use a Qi address to accept Qi and a Quai address to accept QUAI.
           </div>
         )}
+        {loading ? (
+          <div className="space-y-3">
+            <Skeleton className="h-9 w-full rounded-lg" />
+            <Skeleton className="h-9 w-32 rounded-xl" />
+          </div>
+        ) : (
         <form onSubmit={saveWallet} className="space-y-3">
           <input
             type="text"
@@ -166,10 +182,11 @@ export default function SettingsPage() {
               {walletMsg.text}
             </p>
           )}
-          <Button type="submit" variant="primary" size="md" loading={savingWallet} disabled={loading}>
+          <Button type="submit" variant="primary" size="md" loading={savingWallet}>
             Save address
           </Button>
         </form>
+        )}
       </Card>
 
       {/* API keys */}
@@ -211,7 +228,9 @@ export default function SettingsPage() {
         )}
 
         {loading ? (
-          <p className="text-sm text-gray-400">Loading keys…</p>
+          <div className="border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
+            <SkeletonListRows rows={2} />
+          </div>
         ) : apiKeys.length === 0 ? (
           <div className="px-4 py-8 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg text-center">
             <p className="text-sm text-gray-400">No active API keys yet</p>

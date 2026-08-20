@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { SkeletonPage } from '@/components/ui/Skeleton';
 import {
   getAccessToken,
   getRefreshToken,
@@ -70,11 +71,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   }, []);
 
   if (!ready) {
-    return (
-      <div className="min-h-[50vh] flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <SkeletonPage />;
   }
 
   return <>{children}</>;

@@ -7,6 +7,7 @@ import { Button } from '../../../components/ui/Button';
 import { Card } from '../../../components/ui/Card';
 import { apiClient } from '../../../lib/api-client';
 import { formatDate } from '../../../lib/formatters';
+import { SkeletonListRows, SkeletonTableRows } from '../../../components/ui/Skeleton';
 
 export default function WebhooksPage() {
   const [webhooks, setWebhooks] = useState<Webhook[]>([]);
@@ -159,7 +160,7 @@ export default function WebhooksPage() {
         <h3 className="text-base font-bold text-gray-900 dark:text-white">Active Endpoints</h3>
         <Card className="!p-0 overflow-hidden">
           {loading ? (
-            <div className="p-8 text-center text-sm text-gray-400">Loading webhooks...</div>
+            <SkeletonListRows rows={2} />
           ) : webhooks.length === 0 ? (
             <div className="p-12 text-center text-sm text-gray-400">No webhooks registered yet.</div>
           ) : (
@@ -227,7 +228,25 @@ export default function WebhooksPage() {
       <div className="space-y-3">
         <h3 className="text-base font-bold text-gray-900 dark:text-white">Delivery Logs</h3>
         <Card className="!p-0 overflow-hidden">
-          {deliveries.length === 0 ? (
+          {loading ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/50 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3">Event</th>
+                    <th className="px-6 py-3">Payment Code</th>
+                    <th className="px-6 py-3">Status</th>
+                    <th className="px-6 py-3">Attempt</th>
+                    <th className="px-6 py-3">Timestamp</th>
+                    <th className="px-6 py-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                  <SkeletonTableRows rows={4} cols={6} />
+                </tbody>
+              </table>
+            </div>
+          ) : deliveries.length === 0 ? (
             <div className="p-12 text-center text-sm text-gray-400">No delivery logs recorded yet.</div>
           ) : (
             <div className="overflow-x-auto">
