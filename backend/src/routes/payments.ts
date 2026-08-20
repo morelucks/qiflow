@@ -11,7 +11,14 @@ const submitTxLimiter = createRateLimiter({
   message: 'Too many transaction submissions. Please wait a moment and try again.',
 });
 
-// Public routes for the hosted checkout page
+const publicCreateLimiter = createRateLimiter({
+  windowMs: 60_000,
+  max: 30,
+  message: 'Too many checkout sessions created. Please wait a moment and try again.',
+});
+
+// Public routes for the hosted checkout page / Inline checkout
+router.post('/public', publicCreateLimiter, PaymentsController.createPublicPayment);
 router.get('/public/code/:code', PaymentsController.getPublicPayment);
 router.post('/public/code/:code/tx', submitTxLimiter, PaymentsController.submitTransaction);
 

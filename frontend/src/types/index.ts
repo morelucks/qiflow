@@ -67,6 +67,7 @@ export interface MerchantProfile {
   email: string | null;
   businessName: string;
   walletAddress: string | null;
+  publicKey?: string | null;
   createdAt: string;
   apiKeys?: ApiKey[];
 }

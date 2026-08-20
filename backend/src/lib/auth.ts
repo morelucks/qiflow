@@ -70,3 +70,8 @@ export function generateApiKey(environment: 'test' | 'live' = 'test'): Generated
 export function hashApiKey(key: string): string {
   return crypto.createHash('sha256').update(key).digest('hex');
 }
+
+// ── Publishable key (safe to embed in web pages; identifies the merchant only) ─
+export function generatePublicKey(environment: 'test' | 'live' = 'live'): string {
+  return `qiflow_pk_${environment}_${crypto.randomBytes(16).toString('hex')}`;
+}

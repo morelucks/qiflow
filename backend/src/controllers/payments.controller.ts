@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { PaymentsService } from '../services/payments.service.js';
-import { createPaymentSchema, simulatePaymentSchema, submitTransactionSchema } from '../schemas/payments.schema.js';
+import { createPaymentSchema, simulatePaymentSchema, submitTransactionSchema, publicCreatePaymentSchema } from '../schemas/payments.schema.js';
 
 export class PaymentsController {
   static async getPublicPayment(req: Request, res: Response, next: NextFunction) {
@@ -8,6 +8,16 @@ export class PaymentsController {
       const code = req.params.code as string;
       const data = await PaymentsService.getPublicPayment(code);
       res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async createPublicPayment(req: Request, res: Response, next: NextFunction) {
+    try {
+      const input = publicCreatePaymentSchema.parse(req.body);
+      const data = await PaymentsService.createPublicPayment(input);
+      res.status(data.reused ? 200 : 201).json({ success: true, data });
     } catch (err) {
       next(err);
     }

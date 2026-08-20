@@ -16,17 +16,28 @@ const nextConfig = {
 
   // Security headers
   async headers() {
+    const common = [
+      { key: 'X-Content-Type-Options', value: 'nosniff' },
+      { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+      { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+    ];
     return [
+      // Everything except the checkout pages refuses to be framed
       {
-        source: '/(.*)',
+        source: '/((?!pay/).*)',
+        headers: [{ key: 'X-Frame-Options', value: 'DENY' }, ...common],
+      },
+      // Hosted checkout may be embedded by merchant sites (Inline checkout modal)
+      {
+        source: '/pay/:path*',
+        headers: [{ key: 'Content-Security-Policy', value: 'frame-ancestors *' }, ...common],
+      },
+      // Inline SDK script: cacheable, versioned path
+      {
+        source: '/v1/inline.js',
         headers: [
-          { key: 'X-Frame-Options', value: 'DENY' },
-          { key: 'X-Content-Type-Options', value: 'nosniff' },
-          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-          {
-            key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=()',
-          },
+          { key: 'Cache-Control', value: 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400' },
+          { key: 'Access-Control-Allow-Origin', value: '*' },
         ],
       },
     ];

@@ -126,7 +126,8 @@ export default function QuickstartPage() {
 
             <Step title="Send the customer to checkout">
               <P>
-                Redirect (or link) to <code>data.checkoutUrl</code>. The hosted page shows the amount, a QR code and the deposit address; QUAI payers can
+                Redirect (or link) to <code>data.checkoutUrl</code> — or keep the customer on your page with{' '}
+                <Link href="/docs/inline">Inline checkout</Link> (a modal). The hosted page shows the amount, a QR code and the deposit address; QUAI payers can
                 pay in one click with Pelagus, Qi payers send from their wallet and confirm with the transaction hash. The page updates itself while the
                 transaction confirms. Details in <Link href="/docs/checkout">Hosted checkout</Link>.
               </P>

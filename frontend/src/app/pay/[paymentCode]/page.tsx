@@ -1,15 +1,42 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import type { Payment } from '../../../types';
 import { Button } from '../../../components/ui/Button';
 import { apiClient } from '../../../lib/api-client';
 import { formatAmount, truncateAddress } from '../../../lib/formatters';
 import { payQuaiWithPelagus } from '../../../lib/pelagus';
 
+/** Post a checkout event to the embedding page (Inline checkout SDK) and/or opener (popup mode). */
+function postCheckoutEvent(data: Record<string, unknown>) {
+  if (typeof window === 'undefined') return;
+  const msg = { source: 'qiflow', version: 1, ...data };
+  try {
+    if (window.parent && window.parent !== window) window.parent.postMessage(msg, '*');
+  } catch {
+    /* ignore */
+  }
+  try {
+    if (window.opener && !window.opener.closed) window.opener.postMessage(msg, '*');
+  } catch {
+    /* ignore */
+  }
+}
+
 export default function SingleCheckoutPage({ params }: { params: { paymentCode: string } }) {
-  const { paymentCode } = params;
+  return (
+    <Suspense fallback={null}>
+      <CheckoutInner paymentCode={params.paymentCode} />
+    </Suspense>
+  );
+}
+
+function CheckoutInner({ paymentCode }: { paymentCode: string }) {
+  const searchParams = useSearchParams();
+  const embed = searchParams.get('embed') === '1';
+  const lastStatus = useRef<string | null>(null);
   const [payment, setPayment] = useState<Payment | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +66,22 @@ export default function SingleCheckoutPage({ params }: { params: { paymentCode: 
     const interval = setInterval(fetchPayment, 3000);
     return () => clearInterval(interval);
   }, [fetchPayment]);
+
+  // Inline SDK events: ready once, then every status transition
+  useEffect(() => {
+    postCheckoutEvent({ type: 'ready', paymentCode });
+  }, [paymentCode]);
+  useEffect(() => {
+    if (!payment || payment.status === lastStatus.current) return;
+    lastStatus.current = payment.status;
+    const base = { paymentCode: payment.paymentCode, status: payment.status, txHash: payment.txHash, amount: payment.amount, currency: payment.currency };
+    postCheckoutEvent({ type: 'status', ...base });
+    if (payment.status === 'COMPLETED') postCheckoutEvent({ type: 'completed', ...base });
+    if (payment.status === 'FAILED') postCheckoutEvent({ type: 'failed', ...base });
+    if (payment.status === 'EXPIRED') postCheckoutEvent({ type: 'expired', ...base });
+  }, [payment]);
+
+  const closeEmbed = () => postCheckoutEvent({ type: 'close', paymentCode });
 
   const copyAddress = () => {
     if (!payment) return;
@@ -95,9 +138,13 @@ export default function SingleCheckoutPage({ params }: { params: { paymentCode: 
     }
   };
 
+  const shell = embed
+    ? 'min-h-screen bg-ink flex items-start sm:items-center justify-center p-0 sm:p-4'
+    : 'min-h-screen bg-gradient-to-br from-gray-50 via-gray-100 to-gray-200 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 flex items-center justify-center p-4';
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center p-4">
+      <div className={embed ? shell : 'min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center p-4'}>
         <div className="text-center space-y-3">
           <div className="w-8 h-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto" />
           <p className="text-sm font-medium text-gray-500">Loading checkout session...</p>
@@ -108,7 +155,7 @@ export default function SingleCheckoutPage({ params }: { params: { paymentCode: 
 
   if (error || !payment) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center p-4">
+      <div className={embed ? shell : 'min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center p-4'}>
         <div className="max-w-md w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-8 text-center space-y-4 shadow-xl">
           <h2 className="text-lg font-bold text-gray-900 dark:text-white">Checkout Error</h2>
           <p className="text-xs text-gray-500">{error || 'This payment link or code is invalid.'}</p>
@@ -131,8 +178,18 @@ export default function SingleCheckoutPage({ params }: { params: { paymentCode: 
   )}`;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-gray-100 to-gray-200 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-3xl p-8 shadow-2xl space-y-6">
+    <div className={shell}>
+      <div className={`relative w-full max-w-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-8 space-y-6 ${embed ? 'rounded-none sm:rounded-3xl min-h-screen sm:min-h-0' : 'rounded-3xl shadow-2xl'}`}>
+        {embed && (
+          <button
+            type="button"
+            onClick={closeEmbed}
+            aria-label="Close checkout"
+            className="absolute top-3 right-3 w-10 h-10 inline-flex items-center justify-center rounded-xl text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          </button>
+        )}
         {/* Branding & Merchant */}
         <div className="text-center space-y-1">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-50 dark:bg-brand-950/60 text-brand-600 dark:text-brand-400 text-[11px] font-bold uppercase tracking-wider">
@@ -297,7 +354,7 @@ export default function SingleCheckoutPage({ params }: { params: { paymentCode: 
         <div className="border-t border-gray-200 dark:border-gray-800 pt-4 text-center">
           <p className="text-xs text-gray-400">
             Powered by{' '}
-            <Link href="/" className="font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+            <Link href="/" target={embed ? '_blank' : undefined} className="font-semibold text-brand-600 dark:text-brand-400 hover:underline">
               QiFlow Payment Gateway
             </Link>
           </p>

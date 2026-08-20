@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import type { PaymentStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import type { CreatePaymentInput, SimulatePaymentInput, SubmitTransactionInput } from '../schemas/payments.schema.js';
+import type { CreatePaymentInput, SimulatePaymentInput, SubmitTransactionInput, PublicCreatePaymentInput } from '../schemas/payments.schema.js';
 import type { MerchantContext } from '../types/index.js';
 import { createError } from '../middleware/errorHandler.js';
 import { verifyPaymentOnChain } from './payment-verifier.js';
@@ -108,6 +108,7 @@ export class PaymentsService {
         expiresAt,
         status: 'CREATED',
         ...(input.description ? { description: input.description } : {}),
+        ...(input.metadata ? { metadata: input.metadata as object } : {}),
       },
     });
 
@@ -123,6 +124,55 @@ export class PaymentsService {
       expiresAt: payment.expiresAt,
       createdAt: payment.createdAt,
     };
+  }
+
+  /**
+   * Public (Inline checkout): create a payment using a merchant's publishable key.
+   * `reference` makes the call idempotent — the same open/completed payment is returned.
+   */
+  static async createPublicPayment(input: PublicCreatePaymentInput) {
+    const merchant = await prisma.merchant.findUnique({
+      where: { publicKey: input.publicKey },
+      select: { id: true, email: true, businessName: true, walletAddress: true },
+    });
+    if (!merchant) {
+      throw createError('Unknown publishable key.', 401, 'INVALID_PUBLIC_KEY');
+    }
+
+    const toPublic = (p: {
+      paymentCode: string; amount: { toString(): string }; currency: string; description: string | null;
+      status: string; expiresAt: Date; createdAt: Date;
+    }) => ({
+      paymentCode: p.paymentCode,
+      amount: p.amount.toString(),
+      currency: p.currency,
+      description: p.description,
+      status: p.status,
+      checkoutUrl: getPaymentCheckoutUrl(p.paymentCode),
+      expiresAt: p.expiresAt,
+      createdAt: p.createdAt,
+    });
+
+    if (input.reference) {
+      const existing = await prisma.payment.findFirst({
+        where: {
+          merchantId: merchant.id,
+          status: { in: ['CREATED', 'PENDING', 'PROCESSING', 'COMPLETED'] },
+          metadata: { path: ['reference'], equals: input.reference },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (existing) return { ...toPublic(existing), reused: true };
+    }
+
+    const metadata = { ...(input.metadata ?? {}), ...(input.reference ? { reference: input.reference } : {}) };
+    const created = await PaymentsService.createPayment(merchant, {
+      amount: input.amount,
+      currency: input.currency,
+      ...(input.description ? { description: input.description } : {}),
+      ...(Object.keys(metadata).length ? { metadata } : {}),
+    });
+    return { ...toPublic({ ...created, amount: created.amount }), reused: false };
   }
 
   /**
