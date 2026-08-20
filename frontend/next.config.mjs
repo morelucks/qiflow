@@ -8,7 +8,7 @@ const __dirname = path.dirname(__filename);
 const nextConfig = {
   // Explicitly set workspace root in experimental config for Next.js 14
   experimental: {
-    outputFileTracingRoot: path.join(__dirname, '../../'),
+    outputFileTracingRoot: path.join(__dirname, '../'),
   },
 
   // Transpile shared workspace packages
