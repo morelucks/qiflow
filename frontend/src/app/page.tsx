@@ -38,7 +38,7 @@ export default function HomePage() {
       <Navbar />
 
       {/* Hero Section */}
-      <div className="reveal">
+      <div className="reveal visible">
         <Hero />
       </div>
 
