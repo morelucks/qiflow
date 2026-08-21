@@ -43,6 +43,7 @@
 }
 
 html {
+  overflow-x: clip; /* mobile browsers ignore body-only overflow-x; never let a wide element widen the viewport */
   scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

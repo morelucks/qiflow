@@ -5,7 +5,8 @@ import { useState } from 'react';
 export default function CodeWindow() {
   const [copied, setCopied] = useState(false);
 
-  const codeString = `curl -X POST ${process.env.NEXT_PUBLIC_API_URL || 'https://api.qiflow.io'}/v1/payments \\
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || 'https://api.qiflow.io';
+  const codeString = `curl -X POST ${apiBase}/v1/payments \\
   -H "X-API-Key: qiflow_live_9a8f..." \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -21,15 +22,15 @@ export default function CodeWindow() {
   };
 
   return (
-    <div className="w-full max-w-3xl mx-auto group perspective-1000">
-      <div className="relative rounded-2xl bg-[#141033] border border-violet/40 p-4 sm:p-6 shadow-card-lg backdrop-blur-xl transform sm:rotate-x-3 group-hover:rotate-x-0 group-hover:border-violet/70 group-hover:shadow-glow-violet transition-all duration-500 ease-out">
+    <div className="w-full min-w-0 max-w-3xl mx-auto group perspective-1000">
+      <div className="relative min-w-0 overflow-hidden rounded-2xl bg-[#141033] border border-violet/40 p-4 sm:p-6 shadow-card-lg backdrop-blur-xl transform sm:rotate-x-3 group-hover:rotate-x-0 group-hover:border-violet/70 group-hover:shadow-glow-violet transition-all duration-500 ease-out">
         {/* macOS Dots Header */}
-        <div className="flex items-center justify-between border-b border-violet/20 pb-3 mb-4">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-violet/20 pb-3 mb-4">
+          <div className="flex items-center gap-2 min-w-0">
             <span className="w-3 h-3 rounded-full bg-rose-500 inline-block" />
             <span className="w-3 h-3 rounded-full bg-amber-500 inline-block" />
             <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" />
-            <span className="ml-3 text-xs text-slate-400 font-mono">bash — POST /v1/payments</span>
+            <span className="ml-3 text-xs text-slate-400 font-mono truncate">bash — POST /v1/payments</span>
           </div>
           <button
             onClick={copyToClipboard}
@@ -56,13 +57,13 @@ export default function CodeWindow() {
         </div>
 
         {/* Syntax-Highlighted Code Body */}
-        <pre className="font-mono text-xs sm:text-sm text-left overflow-x-auto leading-relaxed p-2">
+        <pre className="font-mono text-xs sm:text-sm text-left overflow-x-auto max-w-full leading-relaxed p-2 [-webkit-overflow-scrolling:touch]">
           <code>
             <span className="text-mint font-semibold">curl</span>{' '}
             <span className="text-blue-400 font-medium">-X POST</span>{' '}
-            <span className="text-[#D4C7FC]">https://api.qiflow.io/v1/payments</span>{' '}\{'\n'}
+            <span className="text-[#D4C7FC]">{apiBase}/v1/payments</span>{' '}\{'\n'}
             {'  '}<span className="text-blue-400 font-medium">-H</span>{' '}
-            <span className="text-[#D4C7FC]">&quot;Authorization: Bearer qiflow_sec_9a8f...&quot;</span>{' '}\{'\n'}
+            <span className="text-[#D4C7FC]">&quot;X-API-Key: qiflow_live_9a8f...&quot;</span>{' '}\{'\n'}
             {'  '}<span className="text-blue-400 font-medium">-H</span>{' '}
             <span className="text-[#D4C7FC]">&quot;Content-Type: application/json&quot;</span>{' '}\{'\n'}
             {'  '}<span className="text-blue-400 font-medium">-d</span>{' '}

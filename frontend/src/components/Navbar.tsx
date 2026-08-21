@@ -22,10 +22,10 @@ export default function Navbar() {
           : 'bg-ink/40 backdrop-blur-xl border-b border-violet/5 py-5'
       }`}
     >
-      <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between gap-3">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-3 group">
-          <div className="w-10 h-10 rounded-full border-2 border-violet flex items-center justify-center shadow-glow-violet group-hover:scale-105 transition-transform bg-indigo/40">
+        <Link href="/" className="flex items-center gap-2.5 sm:gap-3 group shrink-0">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full border-2 border-violet flex items-center justify-center shadow-glow-violet group-hover:scale-105 transition-transform bg-indigo/40">
             {/* Mint Upward Triangle Arrow */}
             <svg
               className="w-4 h-4 text-mint transform group-hover:-translate-y-0.5 transition-transform"
@@ -35,7 +35,7 @@ export default function Navbar() {
               <polygon points="12,4 22,20 2,20" />
             </svg>
           </div>
-          <span className="text-xl font-bold tracking-tight text-white font-sans">
+          <span className="text-lg sm:text-xl font-bold tracking-tight text-white font-sans whitespace-nowrap">
             Qi<span className="text-mint">Flow</span>
           </span>
         </Link>
@@ -60,16 +60,16 @@ export default function Navbar() {
         </nav>
 
         {/* Action CTAs */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4 shrink-0">
           <Link
             href="/auth/login"
-            className="md:hidden text-sm text-[#A5A3B8] hover:text-white font-medium transition-colors px-2 py-1"
+            className="md:hidden text-sm text-[#A5A3B8] hover:text-white font-medium transition-colors px-2 py-1 whitespace-nowrap"
           >
             Log in
           </Link>
           <Link
             href="/auth/register"
-            className="bg-mint text-ink font-semibold text-sm px-5 py-2.5 rounded-xl shadow-glow-mint hover:bg-[#26eed2] hover:scale-[1.02] active:scale-[0.98] transition-all"
+            className="bg-mint text-ink font-semibold text-sm px-4 sm:px-5 py-2.5 rounded-xl shadow-glow-mint hover:bg-[#26eed2] hover:scale-[1.02] active:scale-[0.98] transition-all whitespace-nowrap"
           >
             Get Started
           </Link>
