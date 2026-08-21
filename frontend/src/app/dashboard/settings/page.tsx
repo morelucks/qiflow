@@ -32,6 +32,8 @@ export default function SettingsPage() {
   const [newRawKey, setNewRawKey] = useState<string | null>(null);
   const [keyCopied, setKeyCopied] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [pkCopied, setPkCopied] = useState(false);
+  const [rotatingPk, setRotatingPk] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -100,6 +102,24 @@ export default function SettingsPage() {
       setApiKeys((prev) => prev.filter((x) => x.id !== k.id));
       toast.success('API key revoked', k.name);
     } else toast.error('Could not revoke key', res.error?.message);
+  };
+
+  const copyPublicKey = async () => {
+    if (!profile?.publicKey) return;
+    await navigator.clipboard.writeText(profile.publicKey);
+    setPkCopied(true);
+    setTimeout(() => setPkCopied(false), 1800);
+  };
+
+  const rotatePublicKey = async () => {
+    if (!confirm('Rotate your publishable key? Pages using the old key will stop opening checkout until updated.')) return;
+    setRotatingPk(true);
+    const res = await apiClient<{ publicKey: string }>('/merchants/me/public-key/rotate', { method: 'POST' });
+    setRotatingPk(false);
+    if (res.success && res.data) {
+      setProfile((p) => (p ? { ...p, publicKey: res.data!.publicKey } : p));
+      toast.success('Publishable key rotated');
+    } else toast.error('Could not rotate key', res.error?.message);
   };
 
   const copyKey = async () => {
@@ -178,6 +198,36 @@ export default function SettingsPage() {
               )}
             </div>
           </form>
+        )}
+      </Card>
+
+      {/* Publishable key (Inline checkout) */}
+      <Card className="space-y-4">
+        <CardHeader
+          title="Publishable key"
+          description={
+            <>
+              Safe to use in web pages. Lets <a href="/docs/inline" className="text-mint underline underline-offset-4">Inline checkout</a> open a payment for your account with just an amount —
+              it can&apos;t read or change anything.
+            </>
+          }
+        />
+        {loading ? (
+          <Skeleton className="h-10 w-full rounded-xl" />
+        ) : (
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <code className="flex-1 h-10 px-3.5 rounded-xl bg-ink/60 border border-violet/30 text-xs font-mono text-slate-200 flex items-center overflow-x-auto">
+              {profile?.publicKey ?? '—'}
+            </code>
+            <div className="flex gap-2">
+              <Button variant="secondary" size="md" onClick={copyPublicKey} leftIcon={pkCopied ? <IconCheck size={14} /> : <IconCopy size={14} />}>
+                {pkCopied ? 'Copied' : 'Copy'}
+              </Button>
+              <Button variant="outline" size="md" loading={rotatingPk} onClick={rotatePublicKey}>
+                Rotate
+              </Button>
+            </div>
+          </div>
         )}
       </Card>
 

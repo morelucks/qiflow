@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import crypto from 'crypto';
 import { verifyMessage, getAddress } from 'ethers';
 import { prisma } from '../lib/prisma.js';
-import { generateTokens, generateApiKey, verifyRefreshToken } from '../lib/auth.js';
+import { generateTokens, generateApiKey, generatePublicKey, verifyRefreshToken } from '../lib/auth.js';
 import type { RegisterInput, LoginInput } from '../schemas/auth.schema.js';
 import type { WalletNonceInput, WalletVerifyInput } from '../schemas/wallet-auth.schema.js';
 import { createError } from '../middleware/errorHandler.js';
@@ -128,6 +128,7 @@ export class AuthService {
           passwordHash: null,
           businessName,
           walletAddress: address,
+          publicKey: generatePublicKey('live'),
         },
       });
 
@@ -185,6 +186,7 @@ export class AuthService {
           passwordHash,
           businessName: input.businessName,
           walletAddress: input.walletAddress ?? null,
+          publicKey: generatePublicKey('live'),
         },
       });
     } catch (err) {

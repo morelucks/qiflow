@@ -26,6 +26,17 @@ export const submitTransactionSchema = z.object({
     .optional(),
 });
 
+export const publicCreatePaymentSchema = z.object({
+  publicKey: z.string().trim().regex(/^qiflow_pk_(live|test)_[a-f0-9]{32}$/, 'Invalid publishable key'),
+  amount: z.coerce.number().positive('Amount must be greater than 0'),
+  currency: z.enum(['QI', 'QUAI']).default('QI'),
+  description: z.string().max(255).optional(),
+  /** Merchant's own order id — makes the request idempotent per merchant. */
+  reference: z.string().trim().min(1).max(64).optional(),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+export type PublicCreatePaymentInput = z.infer<typeof publicCreatePaymentSchema>;
 export type SubmitTransactionInput = z.infer<typeof submitTransactionSchema>;
 export type CreatePaymentInput = z.infer<typeof createPaymentSchema>;
 export type SimulatePaymentInput = z.infer<typeof simulatePaymentSchema>;

@@ -14,6 +14,8 @@ export const DOCS_SECTIONS: DocsSection[] = [
   { href: '/docs/payments', title: 'Payments', description: 'Create and track one-time payments.' },
   { href: '/docs/payment-links', title: 'Payment links', description: 'Reusable links for products and tips.' },
   { href: '/docs/checkout', title: 'Hosted checkout', description: 'What your customer sees, and how it confirms.' },
+  { href: '/docs/inline', title: 'Inline checkout', description: 'Open checkout in a modal on your own page.' },
+  { href: '/docs/sdks', title: 'SDKs', description: 'Node.js and React packages.' },
   { href: '/docs/webhooks', title: 'Webhooks', description: 'Signed events when payments complete or fail.' },
   { href: '/docs/errors', title: 'Errors & limits', description: 'Error envelope, codes, rate limits.' },
 ];

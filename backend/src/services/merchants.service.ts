@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { generateApiKey } from '../lib/auth.js';
+import { generateApiKey, generatePublicKey } from '../lib/auth.js';
 import type { UpdateMerchantInput, CreateApiKeyInput } from '../schemas/merchants.schema.js';
 import { createError } from '../middleware/errorHandler.js';
 
@@ -23,6 +23,7 @@ export class MerchantsService {
         email: true,
         businessName: true,
         walletAddress: true,
+        publicKey: true,
         createdAt: true,
         updatedAt: true,
         apiKeys: {
@@ -37,7 +38,28 @@ export class MerchantsService {
       throw createError('Merchant profile not found', 404, 'NOT_FOUND');
     }
 
+    // Lazily provision a publishable key for accounts created before the field existed
+    if (!merchant.publicKey) {
+      merchant.publicKey = await MerchantsService.ensurePublicKey(merchantId);
+    }
+
     return merchant;
+  }
+
+  // ── Publishable key ─────────────────────────────────────────────────────────
+
+  static async ensurePublicKey(merchantId: string): Promise<string> {
+    const existing = await prisma.merchant.findUnique({ where: { id: merchantId }, select: { publicKey: true } });
+    if (existing?.publicKey) return existing.publicKey;
+    const publicKey = generatePublicKey('live');
+    await prisma.merchant.update({ where: { id: merchantId }, data: { publicKey } });
+    return publicKey;
+  }
+
+  static async rotatePublicKey(merchantId: string) {
+    const publicKey = generatePublicKey('live');
+    await prisma.merchant.update({ where: { id: merchantId }, data: { publicKey } });
+    return { publicKey };
   }
 
   static async updateMerchantProfile(merchantId: string, input: UpdateMerchantInput) {

@@ -1,0 +1,45 @@
+{
+  "name": "@qiflow/sdk",
+  "version": "0.1.0",
+  "description": "Official Node.js SDK for the QiFlow payment gateway (Quai Network) \u2014 payments, payment links, webhooks and signature verification.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "qiflow",
+    "quai",
+    "qi",
+    "payments",
+    "crypto",
+    "payment-gateway",
+    "webhooks"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "type-check": "tsc --noEmit",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "lint": "eslint src --ext .ts",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "@qiflow/config": "*",
+    "typescript": "5.7.3"
+  }
+}

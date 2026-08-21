@@ -1,0 +1,33 @@
+{
+  "name": "@qiflow/react",
+  "version": "0.1.0",
+  "description": "React bindings for QiFlow Inline checkout — open a Qi / QUAI payment modal from your React or Next.js app.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "publishConfig": { "access": "public" },
+  "keywords": ["qiflow", "quai", "qi", "payments", "react", "checkout"],
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "scripts": {
+    "build": "tsc",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src --ext .ts,.tsx",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "@qiflow/config": "*",
+    "@types/react": "^18.3.0",
+    "react": "^18.3.1",
+    "typescript": "5.7.3"
+  }
+}

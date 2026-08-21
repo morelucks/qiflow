@@ -8,7 +8,7 @@ export default function Hero() {
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] bg-violet/25 rounded-full blur-[120px] pointer-events-none animate-drift" />
       <div className="absolute top-1/3 left-1/3 w-[450px] h-[450px] bg-mint/20 rounded-full blur-[120px] pointer-events-none animate-drift-reverse" />
 
-      <div className="relative z-10 max-w-4xl mx-auto space-y-8">
+      <div className="relative z-10 w-full min-w-0 max-w-4xl mx-auto space-y-8">
         {/* Badge Pill */}
         <div className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-indigo/90 border border-violet/40 shadow-card backdrop-blur-md">
           <span className="w-2.5 h-2.5 rounded-full bg-mint pulse-dot" />
@@ -18,7 +18,7 @@ export default function Hero() {
         </div>
 
         {/* H1 Headline */}
-        <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight text-white leading-[1.1]">
+        <h1 className="text-[2.5rem] sm:text-6xl md:text-7xl font-bold tracking-tight text-white leading-[1.1] text-balance">
           The payment gateway for{' '}
           <span className="bg-gradient-to-r from-mint via-[#60ffe0] to-[#80ffdb] bg-clip-text text-transparent drop-shadow">
             Qi
@@ -47,7 +47,7 @@ export default function Hero() {
         </div>
 
         {/* Code Window Container */}
-        <div className="pt-10">
+        <div className="pt-10 w-full min-w-0">
           <CodeWindow />
         </div>
       </div>

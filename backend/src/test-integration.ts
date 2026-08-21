@@ -600,6 +600,48 @@ async function runIntegrationTest() {
     if (!statsData.data.received.some((r: any) => r.currency === 'QI' && parseFloat(r.amount) > 0))
       throw new Error('Dashboard stats did not sum completed QI payments');
 
+    // Test 19c: Publishable key + public (Inline) payment creation
+    console.log('\n1️⃣9️⃣c Testing publishable key & POST /v1/payments/public ...');
+    const meForPk = await fetch(`${baseUrl}/merchants/me`, { headers: { Authorization: `Bearer ${accessToken}` } });
+    const meForPkData = (await meForPk.json()) as any;
+    const publicKey: string = meForPkData.data?.publicKey;
+    console.log('   Profile publicKey:', publicKey?.slice(0, 16) + '…');
+    if (!/^qiflow_pk_live_[a-f0-9]{32}$/.test(publicKey || '')) throw new Error('Profile is missing a publishable key');
+
+    const pubCreate = (body: Record<string, unknown>) =>
+      fetch(`${baseUrl}/v1/payments/public`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+    const badPk = await pubCreate({ publicKey: 'qiflow_pk_live_' + '0'.repeat(32), amount: 1 });
+    const badPkData = (await badPk.json()) as any;
+    console.log('   Unknown key Status:', badPk.status, badPkData.error?.code);
+    if (badPk.status !== 401 || badPkData.error?.code !== 'INVALID_PUBLIC_KEY') throw new Error('Unknown publishable key was accepted');
+
+    const ref = `order-${Date.now()}`;
+    const pub1 = await pubCreate({ publicKey, amount: 3, currency: 'QI', description: 'Inline test', reference: ref, metadata: { cart: 'c1' } });
+    const pub1Data = (await pub1.json()) as any;
+    console.log('   Create Status:', pub1.status, 'code:', pub1Data.data?.paymentCode, 'reused:', pub1Data.data?.reused);
+    if (pub1.status !== 201 || !pub1Data.data?.paymentCode || !pub1Data.data?.checkoutUrl) throw new Error('Public payment creation failed');
+    if (pub1Data.data.receivingAddress || pub1Data.data.metadata) throw new Error('Public create leaks non-public fields');
+
+    const pub2 = await pubCreate({ publicKey, amount: 3, currency: 'QI', reference: ref });
+    const pub2Data = (await pub2.json()) as any;
+    console.log('   Same reference Status:', pub2.status, 'code:', pub2Data.data?.paymentCode, 'reused:', pub2Data.data?.reused);
+    if (pub2.status !== 200 || pub2Data.data?.paymentCode !== pub1Data.data.paymentCode || pub2Data.data?.reused !== true)
+      throw new Error('Public create with the same reference did not reuse the payment');
+
+    const pubMismatch = await pubCreate({ publicKey, amount: 1, currency: 'QUAI' });
+    const pubMismatchData = (await pubMismatch.json()) as any;
+    console.log('   Ledger mismatch Status:', pubMismatch.status, pubMismatchData.error?.code);
+    if (pubMismatch.status !== 400 || pubMismatchData.error?.code !== 'WALLET_LEDGER_MISMATCH') throw new Error('Public create ignored wallet ledger');
+
+    const pkRotateRes = await fetch(`${baseUrl}/merchants/me/public-key/rotate`, { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` } });
+    const pkRotateData = (await pkRotateRes.json()) as any;
+    console.log('   Rotate Status:', pkRotateRes.status);
+    if (pkRotateRes.status !== 200 || !pkRotateData.data?.publicKey || pkRotateData.data.publicKey === publicKey) throw new Error('Publishable key rotate failed');
+    const oldKeyRes = await pubCreate({ publicKey, amount: 1 });
+    console.log('   Old key after rotate Status:', oldKeyRes.status);
+    if (oldKeyRes.status !== 401) throw new Error('Rotated-out publishable key still works');
+
     // Test 20: Refresh token rotation (dashboard keeps sessions alive with this)
     console.log('\n2️⃣0️⃣ Testing POST /auth/refresh ...');
     const refreshRes = await fetch(`${baseUrl}/auth/refresh`, {
